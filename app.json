@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Viewdue",
+    "slug": "viewdue",
+    "version": "3.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "viewdue",
+    "userInterfaceStyle": "automatic",
+
+    "ios": {
+      "bundleIdentifier": "com.viewdue.app",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.viewdue.app",
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#000000"
+      },
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "./plugins/with-android-build-properties",
+      "@react-native-community/datetimepicker"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "af795914-62c1-4e9e-b5a2-163eb56b38d1"
+      }
+    },
+    "owner": "kaytise",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/af795914-62c1-4e9e-b5a2-163eb56b38d1"
+    }
+  }
+}
