@@ -438,7 +438,7 @@ export const useShoppingStore = create<ShoppingStore>()(
     }),
     {
       name: "todo-app-storage",
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         tasks: state.tasks,
@@ -461,11 +461,11 @@ export const useShoppingStore = create<ShoppingStore>()(
         }>;
 
         return {
-          tasks: (state?.tasks ?? []).map((task) => ({
-            ...task,
-            resetInterval: task.resetInterval ?? ((task as any).isRepeatable ? 'daily' : 'none'),
-            lastResetAt: task.lastResetAt ?? undefined,
-          })),
+          tasks: (state?.tasks ?? []).map((task) => {
+            // Strip out stale reset fields from previous schema versions
+            const { resetInterval: _ri, lastResetAt: _lr, isRepeatable: _rep, ...cleanTask } = task as any;
+            return cleanTask;
+          }),
           scheduledTasks: (state as any)?.scheduledTasks ?? [],
           taskHistory: state?.taskHistory ?? [],
           categories: (state?.categories ?? DEFAULT_CATEGORIES).map(
@@ -478,6 +478,9 @@ export const useShoppingStore = create<ShoppingStore>()(
           settings: {
             ...DEFAULT_SETTINGS,
             ...state?.settings,
+            // remove stale keys from old schema
+            resetInterval: undefined,
+            lastResetAt: undefined,
             accentColor:
               state?.settings?.accentColor ??
               (state?.settings?.dynamicColors ? "#8B7CF6" : "#2563EB"),

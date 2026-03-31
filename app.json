@@ -1,18 +1,20 @@
 {
   "expo": {
-    "name": "shopping",
+    "name": "Cartly",
     "slug": "shopping",
-    "version": "3.0.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "shopping",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.shopping.app",
-      "supportsTablet": true
+      "bundleIdentifier": "com.kaytise.cartly",
+      "supportsTablet": true,
+      "buildNumber": "1"
     },
     "android": {
-      "package": "com.shopping.app",
+      "package": "com.kaytise.cartly",
+      "versionCode": 1,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
