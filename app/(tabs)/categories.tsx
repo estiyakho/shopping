@@ -259,7 +259,7 @@ export default function CategoriesScreen() {
             </View>
             <View style={styles.summaryTextWrap}>
               <Text style={[styles.summaryTitle, { color: colors.text }]}>Let&apos;s start!</Text>
-              <Text style={[styles.summarySubtitle, { color: colors.textMuted }]}>All Todos progress</Text>
+              <Text style={[styles.summarySubtitle, { color: colors.textMuted }]}>all things to buy</Text>
             </View>
           </View>
 
@@ -311,7 +311,7 @@ export default function CategoriesScreen() {
               </Text>
               <Text style={[styles.emptyText, { color: colors.textMuted }]}>
                 {activeTab === 'active'
-                  ? 'Add category to organize todos.'
+                  ? 'organize shopping'
                   : 'An item not currently needed may be stored here. It can become useful in the future.'}
               </Text>
             </View>
@@ -325,7 +325,7 @@ export default function CategoriesScreen() {
       <ModernConfirmationModal
         visible={!!categoryToDelete}
         title="Delete Category?"
-        message="This will permanently delete this category and all its tasks."
+        message="This will permanently delete this category and all its items."
         onClose={() => setCategoryToDelete(null)}
         onConfirm={executeDelete}
         confirmText="Delete"

@@ -421,17 +421,17 @@ export default function CategoryDetailsScreen() {
             <EmptyState
               title={
                 taskFilter === "todo"
-                  ? "Nothing to do"
+                  ? "Nothing to buy"
                   : taskFilter === "done"
-                    ? "No finished tasks"
+                    ? "No finished purchases"
                     : "N/A"
               }
               description={
                 taskFilter === "todo"
-                  ? "Tasks you need to work on will appear here."
+                  ? "Things you need to buy will appear here."
                   : taskFilter === "done"
-                    ? "Finished tasks will appear here."
-                    : "Task that are not available today will appear here."
+                    ? "Finished purchases will appear here."
+                    : "Things that are not available today will appear here."
               }
             />
           }

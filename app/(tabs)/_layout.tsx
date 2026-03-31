@@ -1,6 +1,6 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React, { memo } from 'react';
-import { Ionicons } from '@expo/vector-icons';
 import { Text, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -99,7 +99,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="todos"
         options={{
-          title: 'All Todos',
+          title: 'All Items',
           tabBarIcon: ({ color }) => <Ionicons name="checkbox-outline" size={iconSize} color={color} />,
         }}
       />

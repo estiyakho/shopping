@@ -1,19 +1,18 @@
 {
   "expo": {
-    "name": "Viewdue",
-    "slug": "viewdue",
+    "name": "shopping",
+    "slug": "shopping",
     "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "viewdue",
+    "scheme": "shopping",
     "userInterfaceStyle": "automatic",
-
     "ios": {
-      "bundleIdentifier": "com.viewdue.app",
+      "bundleIdentifier": "com.shopping.app",
       "supportsTablet": true
     },
     "android": {
-      "package": "com.viewdue.app",
+      "package": "com.shopping.app",
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
