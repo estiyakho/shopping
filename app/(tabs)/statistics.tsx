@@ -1,60 +1,39 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { memo, useMemo, useState } from "react";
+import { LayoutAnimation, Platform, Pressable, ScrollView, StyleSheet, Text, UIManager, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SettingsOptionSheet } from "@/components/settings-option-sheet";
 import { AppFonts } from "@/constants/fonts";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useShoppingStore } from "@/store/use-task-store";
-import { runListAnimation } from "@/utils/layout-animation";
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const BDT_RATE = 120;
 
-function StatBox({
-  icon,
-  label,
-  value,
-  tint,
-  colors,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-  tint: string;
-  colors: ReturnType<typeof useAppTheme>;
-}) {
-  return (
-    <View
-      style={[
-        styles.statBox,
-        { backgroundColor: colors.surfaceElevated, borderColor: colors.border },
-      ]}
-    >
-      <View style={[styles.statIconWrap, { backgroundColor: `${tint}22` }]}>
-        <Ionicons color={tint} name={icon} size={18} />
-      </View>
-      <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
-      <Text style={[styles.statLabel, { color: colors.textMuted }]}>
-        {label}
-      </Text>
+const StatBox = memo(({ colors, icon, label, value, tint }: any) => (
+  <View style={[styles.statBox, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+    <View style={[styles.statIconWrap, { backgroundColor: `${tint}22` }]}>
+      <Ionicons name={icon} size={20} color={tint} />
     </View>
-  );
-}
+    <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
+    <Text style={[styles.statLabel, { color: colors.textSoft }]}>{label}</Text>
+  </View>
+));
 
 export default function StatisticsScreen() {
   const colors = useAppTheme();
   const insets = useSafeAreaInsets();
   const accent = colors.accent;
-  
-  const items = useShoppingStore((state) => state.tasks);
-  const itemHistory = useShoppingStore((state) => state.taskHistory);
-  const categories = useShoppingStore((state) => state.categories);
-  const settings = useShoppingStore((state) => state.settings);
-  const updateSettings = useShoppingStore((state) => state.updateSettings);
-  const firstDayOfWeek = settings.firstDayOfWeek;
+  const { categories, tasks, taskHistory, settings, updateSettings } = useShoppingStore();
+  const firstDayOfWeek = settings.firstDayOfWeek || "monday";
   const currency = settings.currency || "USD";
 
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
+  const [drilledCategoryId, setDrilledCategoryId] = useState<string | null>(null);
+  const [isSelectionVisible, setIsSelectionVisible] = useState(false);
 
   const symbol = currency === "USD" ? "$" : "৳";
   const formatPrice = (val: number) => {
@@ -66,248 +45,203 @@ export default function StatisticsScreen() {
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
 
-  // 1. Filter history for current month
   const monthlyHistory = useMemo(() => {
-    return itemHistory.filter(h => {
+    return taskHistory.filter((h: any) => {
       const d = new Date(h.completedAt);
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
-  }, [itemHistory, currentMonth, currentYear]);
+  }, [taskHistory, currentMonth, currentYear]);
 
-  // 2. Filter items created this month
   const monthlyItems = useMemo(() => {
-    return items.filter(item => {
+    return tasks.filter((item: any) => {
       const d = new Date(item.createdAt);
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
-  }, [items, currentMonth, currentYear]);
+  }, [tasks, currentMonth, currentYear]);
 
-  // 3. Totals
   const totalItemCount = monthlyItems.length;
   const purchasedCount = monthlyHistory.length;
-  
   const todayStr = now.toISOString().split('T')[0];
-  const todaySpending = monthlyHistory
-    .filter(h => h.date === todayStr)
-    .reduce((sum, h) => sum + (h.price || 0), 0);
+  const todaySpending = monthlyHistory.filter((h: any) => h.date === todayStr).reduce((sum: number, h: any) => sum + (h.price || 0), 0);
+  const monthSpending = monthlyHistory.reduce((sum: number, h: any) => sum + (h.price || 0), 0);
+  const totalSpendingAllTime = taskHistory.reduce((sum: number, h: any) => sum + (h.price || 0), 0);
 
-  const monthSpending = monthlyHistory.reduce((sum, h) => sum + (h.price || 0), 0);
-
-  // 4. Streak Logic: Consecutive days with spending
   const streak = useMemo(() => {
-    const spentDates = new Set(itemHistory.map(h => h.date));
-    const sortedDates = Array.from(spentDates).sort((a, b) => b.localeCompare(a));
-    
-    if (sortedDates.length === 0) return { current: 0, longest: 0 };
-
-    let current = 0;
-    let longest = 0;
-    let temp = 0;
-
-    // Check current streak from today or yesterday
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    
-    const hasToday = spentDates.has(today);
-    const hasYesterday = spentDates.has(yesterday);
-
-    if (hasToday || hasYesterday) {
-      let checkDate = hasToday ? new Date() : new Date(Date.now() - 86400000);
+    const spentDates = new Set(taskHistory.map((h: any) => h.date));
+    if (spentDates.size === 0) return { current: 0, longest: 0 };
+    const allSorted = Array.from(spentDates).sort((a: any, b: any) => a.localeCompare(b));
+    let current = 0, longest = 0, temp = 0;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    if (spentDates.has(todayStr) || spentDates.has(yesterdayStr)) {
+      let checkDate = spentDates.has(todayStr) ? new Date() : yesterday;
       while (spentDates.has(checkDate.toISOString().split('T')[0])) {
         current++;
         checkDate.setDate(checkDate.getDate() - 1);
       }
     }
-
-    // Longest streak
-    const allSorted = Array.from(spentDates).sort((a, b) => a.localeCompare(b));
     let prevDate: Date | null = null;
     for (const d of allSorted) {
       const cur = new Date(d);
       if (prevDate) {
-        const diff = Math.floor((cur.getTime() - prevDate.getTime()) / 86400000);
-        if (diff === 1) {
-          temp++;
-        } else {
-          longest = Math.max(longest, temp);
-          temp = 1;
-        }
-      } else {
-        temp = 1;
-      }
+        if (Math.floor((cur.getTime() - prevDate.getTime()) / 86400000) === 1) temp++;
+        else { longest = Math.max(longest, temp); temp = 1; }
+      } else temp = 1;
       prevDate = cur;
     }
     longest = Math.max(longest, temp);
-
     return { current, longest };
-  }, [itemHistory]);
+  }, [taskHistory]);
 
-  // 5. Category Spending Breakdown
   const categorySpending = useMemo(() => {
-    const data: Record<string, { name: string, color: string, amount: number }> = {};
-    
-    monthlyHistory.forEach(h => {
+    const data: Record<string, { id: string, name: string, color: string, amount: number }> = {};
+    monthlyHistory.forEach((h: any) => {
       const catId = h.categoryId || "others";
       if (!data[catId]) {
         const cat = categories.find(c => c.id === catId);
-        data[catId] = {
-          name: cat?.name || "Others",
-          color: cat?.color || colors.textMuted,
-          amount: 0
-        };
+        data[catId] = { id: catId, name: cat?.name || "Others", color: cat?.color || colors.textMuted, amount: 0 };
       }
       data[catId].amount += (h.price || 0);
     });
-
     return Object.values(data).sort((a, b) => b.amount - a.amount);
   }, [monthlyHistory, categories, colors.textMuted]);
 
-  const filteredCategorySpending = useMemo(() => {
-    if (selectedCategoryId === "all") return categorySpending;
-    return categorySpending.filter(c => {
-      const id = categories.find(cat => cat.name === c.name)?.id || "others";
-      return id === selectedCategoryId;
-    });
-  }, [categorySpending, selectedCategoryId, categories]);
-
   const maxSpendingInCat = Math.max(...categorySpending.map(c => c.amount), 1);
 
-  // 6. Week Spending View (Creation Date or Completion Date?) - Logic: Money spent per day this week
   const weekSpendingData = useMemo(() => {
     const data = [];
     const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-    const firstDayIndex = dayNames.indexOf(firstDayOfWeek);
-    const currentDayIndex = now.getDay();
-    const daysToSubtract = (currentDayIndex - firstDayIndex + 7) % 7;
-    
+    const firstDayIndex = dayNames.indexOf(settings.firstDayOfWeek || "monday");
+    const diff = (now.getDay() - firstDayIndex + 7) % 7;
     const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - daysToSubtract);
+    weekStart.setDate(now.getDate() - diff);
     weekStart.setHours(0, 0, 0, 0);
-
     for (let i = 0; i < 7; i++) {
       const d = new Date(weekStart);
       d.setDate(weekStart.getDate() + i);
       const dateStr = d.toISOString().split('T')[0];
-      const amount = itemHistory
-        .filter(h => h.date === dateStr)
-        .reduce((sum, h) => sum + (h.price || 0), 0);
-        
-      data.push({
-        label: d.toLocaleDateString(undefined, { weekday: 'short' }),
-        amount,
-        day: d.getDate()
-      });
+      const amount = taskHistory.filter((h: any) => h.date === dateStr).reduce((sum: number, h: any) => sum + (h.price || 0), 0);
+      data.push({ label: d.toLocaleDateString(undefined, { weekday: "short" }), amount, day: d.getDate() });
     }
     return data;
-  }, [itemHistory, firstDayOfWeek]);
+  }, [taskHistory, settings.firstDayOfWeek]);
 
   const maxWeekSpending = Math.max(...weekSpendingData.map(d => d.amount), 1);
+  const weekTotalSpending = weekSpendingData.reduce((sum, d) => sum + d.amount, 0);
+
+  const drilldownItems = useMemo(() => {
+    if (!drilledCategoryId) return [];
+    return monthlyHistory.filter((h: any) => (h.categoryId || "others") === drilledCategoryId);
+  }, [monthlyHistory, drilledCategoryId]);
+
+  const drilledCategory = drilledCategoryId ? (categories.find(c => c.id === drilledCategoryId) || (drilledCategoryId === "others" ? { name: "Others", color: colors.textMuted } : null)) : null;
+  const drilledTotal = drilldownItems.reduce((sum: number, h: any) => sum + (h.price || 0), 0);
+
+  const toggleDrilldown = (catId: string | null) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setDrilledCategoryId(catId);
+  };
 
   return (
     <View style={[styles.safeArea, { paddingTop: insets.top, backgroundColor: colors.background }]}>
-      <ScrollView 
-        contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + 20 }]} 
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + 20 }]} showsVerticalScrollIndicator={false}>
         {/* Header with Currency Selector */}
         <View style={styles.headerRow}>
           <Text style={[styles.title, { color: colors.text }]}>Statistics</Text>
           <View style={[styles.currencySelector, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-            <Pressable 
-              onPress={() => updateSettings({ currency: "USD" })}
-              style={[styles.currencyBtn, currency === "USD" && { backgroundColor: accent }]}
-            >
+            <Pressable onPress={() => updateSettings({ currency: "USD" })} style={[styles.currencyBtn, currency === "USD" && { backgroundColor: accent }]}>
               <Text style={[styles.currencyText, { color: currency === "USD" ? "#FFF" : colors.textSoft }]}>$</Text>
             </Pressable>
-            <Pressable 
-              onPress={() => updateSettings({ currency: "BDT" })}
-              style={[styles.currencyBtn, currency === "BDT" && { backgroundColor: accent }]}
-            >
+            <Pressable onPress={() => updateSettings({ currency: "BDT" })} style={[styles.currencyBtn, currency === "BDT" && { backgroundColor: accent }]}>
               <Text style={[styles.currencyText, { color: currency === "BDT" ? "#FFF" : colors.textSoft }]}>৳</Text>
             </Pressable>
           </View>
         </View>
 
-        {/* Category Island Horizontal Selector */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
-          style={styles.categoryIslandScroll}
-          contentContainerStyle={styles.categoryIslandContent}
-        >
-          <Pressable 
-            onPress={() => setSelectedCategoryId("all")}
-            style={[styles.categoryChip, selectedCategoryId === "all" && { backgroundColor: colors.surfaceElevated, borderColor: accent }]}
-          >
-            <Text style={[styles.categoryChipText, { color: selectedCategoryId === "all" ? colors.text : colors.textSoft }]}>All</Text>
-          </Pressable>
-          {categories.map(cat => (
-            <Pressable 
-              key={cat.id}
-              onPress={() => setSelectedCategoryId(cat.id)}
-              style={[styles.categoryChip, selectedCategoryId === cat.id && { backgroundColor: colors.surfaceElevated, borderColor: cat.color }]}
-            >
-              <View style={[styles.dot, { backgroundColor: cat.color }]} />
-              <Text style={[styles.categoryChipText, { color: selectedCategoryId === cat.id ? colors.text : colors.textSoft }]}>{cat.name}</Text>
-            </Pressable>
-          ))}
-          <Pressable 
-            onPress={() => setSelectedCategoryId("others")}
-            style={[styles.categoryChip, selectedCategoryId === "others" && { backgroundColor: colors.surfaceElevated, borderColor: colors.textMuted }]}
-          >
-            <Text style={[styles.categoryChipText, { color: selectedCategoryId === "others" ? colors.text : colors.textSoft }]}>Others</Text>
-          </Pressable>
-        </ScrollView>
-
-        {/* Category Spending Graph */}
+        {/* Dynamic Category card */}
         <View style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>Category Spending</Text>
-          <View style={styles.categoryGraphArea}>
-            {filteredCategorySpending.length > 0 ? (
-              filteredCategorySpending.map((cat, idx) => (
-                <View key={idx} style={styles.spendingRow}>
-                  <View style={styles.spendingInfo}>
-                    <View style={styles.catLabelRow}>
-                      <View style={[styles.dot, { backgroundColor: cat.color }]} />
-                      <Text style={[styles.catLabelText, { color: colors.text }]}>{cat.name}</Text>
+          <View style={styles.cardHeader}>
+            <View style={styles.titleWithBack}>
+              {drilledCategoryId && (
+                <Pressable onPress={() => toggleDrilldown(null)} style={styles.backBtn}>
+                  <Ionicons name="chevron-back" size={20} color={accent} />
+                </Pressable>
+              )}
+              <Text style={[styles.cardTitle, { color: colors.text }]}>
+                {drilledCategoryId ? drilledCategory?.name : "Category Spending"}
+              </Text>
+            </View>
+            {!drilledCategoryId && (
+              <Pressable 
+                onPress={() => setIsSelectionVisible(true)} 
+                style={[styles.drilldownHeaderBtn, { backgroundColor: `${accent}15` }]}
+              >
+                <Ionicons name="options-outline" size={16} color={accent} />
+                <Text style={[styles.drilldownHeaderBtnText, { color: accent }]}>Select</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {!drilledCategoryId && (
+            <Text style={[styles.cardSubtitle, { color: colors.textSoft, marginBottom: 16, marginTop: -12 }]}>
+              Select a category to view details
+            </Text>
+          )}
+          
+          <View style={styles.cardContent}>
+            {!drilledCategoryId ? (
+              <View style={styles.categoryGraphArea}>
+                {categorySpending.filter(c => c.id !== "others").length > 0 ? (
+                  categorySpending.filter(c => c.id !== "others").map((cat, idx) => (
+                    <View key={idx} style={styles.spendingRow}>
+                      <View style={styles.spendingInfo}>
+                        <View style={styles.catLabelRow}>
+                          <View style={[styles.dot, { backgroundColor: cat.color }]} />
+                          <Text style={[styles.catLabelText, { color: colors.text }]}>{cat.name}</Text>
+                        </View>
+                        <Text style={[styles.catAmountText, { color: colors.text }]}>{formatPrice(cat.amount)}</Text>
+                      </View>
+                      <View style={[styles.spendingBarTrack, { backgroundColor: colors.surfaceMuted }]}>
+                        <View style={[styles.spendingBarFill, { backgroundColor: cat.color, width: `${(cat.amount / maxSpendingInCat) * 100}%` }]} />
+                      </View>
                     </View>
-                    <Text style={[styles.catAmountText, { color: colors.text }]}>{formatPrice(cat.amount)}</Text>
+                  ))
+                ) : (
+                  <View style={styles.emptyGraph}>
+                    <Ionicons name="stats-chart-outline" size={32} color={colors.textMuted} />
+                    <Text style={{ color: colors.textSoft, marginTop: 8 }}>No categories recorded</Text>
                   </View>
-                  <View style={[styles.spendingBarTrack, { backgroundColor: colors.surfaceMuted }]}>
-                    <View 
-                      style={[
-                        styles.spendingBarFill, 
-                        { backgroundColor: cat.color, width: `${(cat.amount / maxSpendingInCat) * 100}%` }
-                      ]} 
-                    />
-                  </View>
-                </View>
-              ))
+                )}
+              </View>
             ) : (
-              <View style={styles.emptyGraph}>
-                <Ionicons name="stats-chart-outline" size={32} color={colors.textMuted} />
-                <Text style={{ color: colors.textSoft, marginTop: 8 }}>No spending recorded</Text>
+              <View style={styles.drillView}>
+                {drilldownItems.length > 0 ? drilldownItems.map((item: any, idx: number) => (
+                  <View key={idx} style={[styles.drillItem, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.drillItemTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+                    <Text style={[styles.drillItemPrice, { color: colors.text }]}>{formatPrice(item.price || 0)}</Text>
+                  </View>
+                )) : (
+                  <View style={styles.emptyDrill}>
+                    <Text style={{ color: colors.textSoft }}>No items this month</Text>
+                  </View>
+                )}
+                <View style={[styles.drillFooter, { borderTopColor: colors.border }]}>
+                  <Text style={[styles.footerPrice, { color: colors.text }]}>{formatPrice(drilledTotal)} Total</Text>
+                </View>
               </View>
             )}
           </View>
         </View>
 
-        {/* Week View Spending Chart */}
+        {/* Week View */}
         <View style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.text }]}>Spending this Week</Text>
           <View style={styles.weekChartArea}>
             {weekSpendingData.map((day, idx) => (
               <View key={idx} style={styles.weekBarCol}>
                 <View style={[styles.weekBarTrack, { backgroundColor: colors.surfaceMuted }]}>
-                  <View 
-                    style={[
-                      styles.weekBarFill, 
-                      { 
-                        backgroundColor: accent, 
-                        height: day.amount > 0 ? `${Math.max(10, (day.amount / maxWeekSpending) * 100)}%` : 0 
-                      }
-                    ]} 
-                  />
+                  <View style={[styles.weekBarFill, { backgroundColor: accent, height: day.amount > 0 ? `${Math.max(10, (day.amount / maxWeekSpending) * 100)}%` : 0 }]} />
                 </View>
                 <Text style={[styles.weekLabel, { color: colors.textMuted }]}>{day.label}</Text>
               </View>
@@ -315,7 +249,7 @@ export default function StatisticsScreen() {
           </View>
         </View>
 
-        {/* Item Overview */}
+        {/* Summary Sections */}
         <View style={styles.sectionWrap}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Item Overview</Text>
           <View style={styles.statsGrid}>
@@ -326,18 +260,31 @@ export default function StatisticsScreen() {
           </View>
         </View>
 
-        {/* Spending Overview */}
         <View style={styles.sectionWrap}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Spending Overview</Text>
           <View style={styles.statsGrid}>
             <StatBox colors={colors} icon="wallet-outline" label="Spent Today" tint="#10B981" value={formatPrice(todaySpending)} />
-            <StatBox colors={colors} icon="cash-outline" label="Spent (Month)" tint="#10B981" value={formatPrice(monthSpending)} />
-            <StatBox colors={colors} icon="calculator-outline" label="Avg/Item" tint="#10B981" value={formatPrice(purchasedCount > 0 ? monthSpending / purchasedCount : 0)} />
-            <StatBox colors={colors} icon="grid-outline" label="Top Category" tint="#10B981" value={categorySpending[0]?.name || "None"} />
+            <StatBox colors={colors} icon="calendar-outline" label="Spent this Week" tint="#10B981" value={formatPrice(weekTotalSpending)} />
+            <StatBox colors={colors} icon="cash-outline" label="Spent this Month" tint="#10B981" value={formatPrice(monthSpending)} />
+            <StatBox colors={colors} icon="stats-chart-outline" label="Spent All Time" tint="#10B981" value={formatPrice(totalSpendingAllTime)} />
           </View>
         </View>
-
       </ScrollView>
+
+      <SettingsOptionSheet
+        visible={isSelectionVisible}
+        title="Select Category"
+        iconName="grid-outline"
+        options={[
+          ...categories.map(c => ({ label: c.name, value: c.id, color: c.color }))
+        ]}
+        selectedValue={drilledCategoryId || undefined}
+        onClose={() => setIsSelectionVisible(false)}
+        onSelect={(val) => {
+          setIsSelectionVisible(false);
+          toggleDrilldown(val);
+        }}
+      />
     </View>
   );
 }
@@ -346,38 +293,27 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   container: { paddingHorizontal: 16, paddingTop: 12 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
-  title: { fontFamily: AppFonts.bold, fontSize: 28 },
-  currencySelector: { 
-    flexDirection: "row", 
-    padding: 4, 
-    borderRadius: 14, 
-    borderWidth: 1, 
-    gap: 4 
-  },
-  currencyBtn: { 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 10 
-  },
+  title: { fontFamily: AppFonts.bold, fontSize: 32 },
+  currencySelector: { flexDirection: "row", padding: 4, borderRadius: 14, borderWidth: 1, gap: 4 },
+  currencyBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
   currencyText: { fontFamily: AppFonts.bold, fontSize: 14 },
   
-  categoryIslandScroll: { marginHorizontal: -16, marginBottom: 16 },
-  categoryIslandContent: { paddingHorizontal: 16, gap: 10 },
-  categoryChip: { 
+  card: { borderRadius: 28, borderWidth: 1, padding: 20, marginBottom: 16, overflow: "hidden" },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
+  titleWithBack: { flexDirection: "row", alignItems: "center", flex: 1, gap: 4 },
+  backBtn: { padding: 4, marginLeft: -4 },
+  cardTitle: { fontFamily: AppFonts.bold, fontSize: 18 },
+  cardSubtitle: { fontFamily: AppFonts.medium, fontSize: 12 },
+  drilldownHeaderBtn: { 
     flexDirection: "row", 
     alignItems: "center", 
-    paddingHorizontal: 14, 
-    paddingVertical: 8, 
-    borderRadius: 20, 
-    borderWidth: 1, 
-    borderColor: "transparent",
+    paddingHorizontal: 12, 
+    paddingVertical: 6, 
+    borderRadius: 12,
     gap: 6
   },
-  categoryChipText: { fontFamily: AppFonts.bold, fontSize: 13 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  
-  card: { borderRadius: 24, borderWidth: 1, padding: 20, marginBottom: 16 },
-  cardTitle: { fontFamily: AppFonts.bold, fontSize: 18, marginBottom: 16 },
+  drilldownHeaderBtnText: { fontFamily: AppFonts.bold, fontSize: 13 },
+  cardContent: { },
   
   categoryGraphArea: { gap: 16 },
   spendingRow: { gap: 8 },
@@ -387,40 +323,28 @@ const styles = StyleSheet.create({
   catAmountText: { fontFamily: AppFonts.bold, fontSize: 14 },
   spendingBarTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
   spendingBarFill: { height: "100%", borderRadius: 4 },
-  emptyGraph: { height: 100, justifyContent: "center", alignItems: "center" },
+  emptyGraph: { height: 120, justifyContent: "center", alignItems: "center", gap: 8 },
   
-  weekChartArea: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "flex-end", 
-    height: 140,
-    paddingTop: 10
-  },
+  drillView: { gap: 0 },
+  drillItem: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  drillItemTitle: { flex: 1, fontFamily: AppFonts.medium, fontSize: 15, marginRight: 12 },
+  drillItemPrice: { fontFamily: AppFonts.bold, fontSize: 15 },
+  emptyDrill: { height: 100, justifyContent: "center", alignItems: "center" },
+  drillFooter: { paddingTop: 16, marginTop: 12, borderTopWidth: 1, alignItems: "flex-end" },
+  footerPrice: { fontFamily: AppFonts.bold, fontSize: 20 },
+
+  weekChartArea: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", height: 140, paddingTop: 10 },
   weekBarCol: { alignItems: "center", flex: 1, gap: 8 },
   weekBarTrack: { width: 12, height: 100, borderRadius: 6, justifyContent: "flex-end", overflow: "hidden" },
   weekBarFill: { width: "100%", borderRadius: 6 },
-  weekLabel: { fontFamily: AppFonts.bold, fontSize: 10 },
+  weekLabel: { fontFamily: AppFonts.bold, fontSize: 11 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
   
   sectionWrap: { marginBottom: 20 },
-  sectionTitle: { fontFamily: AppFonts.bold, fontSize: 22, marginBottom: 12 },
+  sectionTitle: { fontFamily: AppFonts.bold, fontSize: 24, marginBottom: 14 },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  statBox: { 
-    width: "48.4%", 
-    padding: 14, 
-    borderRadius: 20, 
-    borderWidth: 1, 
-    minHeight: 100,
-    justifyContent: "center"
-  },
-  statIconWrap: { 
-    width: 32, 
-    height: 32, 
-    borderRadius: 10, 
-    justifyContent: "center", 
-    alignItems: "center", 
-    marginBottom: 8 
-  },
-  statValue: { fontFamily: AppFonts.bold, fontSize: 18, marginBottom: 2 },
-  statLabel: { fontFamily: AppFonts.medium, fontSize: 12 },
+  statBox: { width: "48.4%", padding: 16, borderRadius: 24, borderWidth: 1, minHeight: 110, justifyContent: "center" },
+  statIconWrap: { width: 36, height: 36, borderRadius: 12, justifyContent: "center", alignItems: "center", marginBottom: 10 },
+  statValue: { fontFamily: AppFonts.bold, fontSize: 20, marginBottom: 2 },
+  statLabel: { fontFamily: AppFonts.medium, fontSize: 13 },
 });
-
