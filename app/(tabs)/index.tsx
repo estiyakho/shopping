@@ -2,7 +2,7 @@ import { Redirect } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { useTaskStore } from '@/store/use-task-store';
+import { useShoppingStore } from '@/store/use-task-store';
 import { DefaultScreen } from '@/types/task';
 
 const ROUTES: Record<DefaultScreen, '/categories' | '/todos' | '/calendar' | '/statistics' | '/settings'> = {
@@ -15,8 +15,8 @@ const ROUTES: Record<DefaultScreen, '/categories' | '/todos' | '/calendar' | '/s
 
 export default function IndexScreen() {
   const colors = useAppTheme();
-  const hydrated = useTaskStore((state) => state.hydrated);
-  const defaultScreen = useTaskStore((state) => state.settings.defaultScreen);
+  const hydrated = useShoppingStore((state) => state.hydrated);
+  const defaultScreen = useShoppingStore((state) => state.settings.defaultScreen);
 
   if (!hydrated) {
     return (

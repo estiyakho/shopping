@@ -11,13 +11,13 @@ import { CategoryFormModal } from "@/components/category-form-modal";
 import { EmptyState } from "@/components/empty-state";
 import { FloatingActionButton } from "@/components/floating-action-button";
 import { SettingsOptionSheet } from "@/components/settings-option-sheet";
-import { TaskFormModal } from "@/components/task-form-modal";
-import { TaskItem } from "@/components/task-item";
+import { ShoppingItemFormModal } from "@/components/task-form-modal";
+import { ShoppingItemCard } from "@/components/task-item";
 import { VerticalScaleDecorator } from "@/components/vertical-scale-decorator";
 import { AppFonts } from "@/constants/fonts";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { useTaskStore } from "@/store/use-task-store";
-import { Task, TaskStatus } from "@/types/task";
+import { useShoppingStore } from "@/store/use-task-store";
+import { ShoppingItem, ShoppingItemStatus } from "@/types/task";
 import { runListAnimation } from "@/utils/layout-animation";
 
 const SORT_OPTIONS = [
@@ -28,44 +28,44 @@ const SORT_OPTIONS = [
 ];
 
 type SortMode = (typeof SORT_OPTIONS)[number]["value"] | "manual";
-type CategoryTaskFilter = "all" | TaskStatus;
+type CategoryItemFilter = "all" | ShoppingItemStatus;
 
 export default function CategoryDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const colors = useAppTheme();
   const insets = useSafeAreaInsets();
-  const categories = useTaskStore((state) => state.categories);
-  const tasks = useTaskStore((state) => state.tasks);
-  const toggleTaskStatus = useTaskStore((state) => state.toggleTaskStatus);
-  const deleteTask = useTaskStore((state) => state.deleteTask);
-  const setTaskNotAvailable = useTaskStore(
-    (state) => state.setTaskNotAvailable,
+  const categories = useShoppingStore((state) => state.categories);
+  const items = useShoppingStore((state) => state.tasks);
+  const toggleItemStatus = useShoppingStore((state) => state.toggleItemStatus);
+  const deleteItem = useShoppingStore((state) => state.deleteItem);
+  const setItemNotAvailable = useShoppingStore(
+    (state) => state.setItemNotAvailable,
   );
-  const reorderTasks = useTaskStore((state) => state.reorderTasks);
-  const archiveCategory = useTaskStore((state) => state.archiveCategory);
-  const unarchiveCategory = useTaskStore((state) => state.unarchiveCategory);
-  const timeFormat = useTaskStore((state) => state.settings.timeFormat);
+  const reorderItems = useShoppingStore((state) => state.reorderItems);
+  const archiveCategory = useShoppingStore((state) => state.archiveCategory);
+  const unarchiveCategory = useShoppingStore((state) => state.unarchiveCategory);
+  const timeFormat = useShoppingStore((state) => state.settings.timeFormat);
 
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
-  const [isAddingTask, setIsAddingTask] = useState(false);
-  const [taskFilter, setTaskFilter] = useState<CategoryTaskFilter>("todo");
+  const [editingItem, setEditingItem] = useState<ShoppingItem | undefined>(undefined);
+  const [isAddingItem, setIsAddingItem] = useState(false);
+  const [itemFilter, setItemFilter] = useState<CategoryItemFilter>("todo");
   const [sortMode, setSortMode] = useState<SortMode>("manual");
   const [sortSheetVisible, setSortSheetVisible] = useState(false);
 
   const categoryId = Array.isArray(params.id) ? params.id[0] : params.id || "";
   const category = categories.find((item) => item.id === categoryId);
 
-  const categoryTasks = useMemo(() => {
+  const categoryItems = useMemo(() => {
     if (!categoryId) return [];
-    const defaultFiltered = tasks.filter(
-      (task) => task.categoryId === categoryId,
+    const defaultFiltered = items.filter(
+      (item) => item.categoryId === categoryId,
     );
     let result = defaultFiltered;
 
-    if (taskFilter !== "all") {
-      result = defaultFiltered.filter((task) => task.status === taskFilter);
+    if (itemFilter !== "all") {
+      result = defaultFiltered.filter((item) => item.status === itemFilter);
     }
 
     result.sort((left, right) => {
@@ -91,9 +91,9 @@ export default function CategoryDetailsScreen() {
     });
 
     return result;
-  }, [categoryId, taskFilter, sortMode, tasks]);
+  }, [categoryId, itemFilter, sortMode, items]);
 
-  const [listData, setListData] = useState<Task[]>(categoryTasks);
+  const [listData, setListData] = useState<ShoppingItem[]>(categoryItems);
   const justDragged = useRef(false);
 
   useEffect(() => {
@@ -101,40 +101,40 @@ export default function CategoryDetailsScreen() {
       justDragged.current = false;
       return;
     }
-    setListData(categoryTasks);
-  }, [categoryTasks]);
+    setListData(categoryItems);
+  }, [categoryItems]);
 
-  const availableTasks = tasks.filter(
-    (task) => task.categoryId === categoryId && task.status !== "not-available",
+  const availableItems = items.filter(
+    (item) => item.categoryId === categoryId && item.status !== "not-available",
   );
-  const totalTasks = availableTasks.length;
-  const completedTasks = availableTasks.filter(
-    (task) => task.status === "done",
+  const totalItems = availableItems.length;
+  const completedItems = availableItems.filter(
+    (item) => item.status === "done",
   ).length;
-  const remainingTasks = totalTasks - completedTasks;
+  const remainingItems = totalItems - completedItems;
 
   const handleDelete = useCallback(
     (id: string) => {
       runListAnimation();
-      deleteTask(id);
+      deleteItem(id);
     },
-    [deleteTask],
+    [deleteItem],
   );
 
   const handleToggle = useCallback(
     (id: string) => {
       runListAnimation();
-      toggleTaskStatus(id);
+      toggleItemStatus(id);
     },
-    [toggleTaskStatus],
+    [toggleItemStatus],
   );
 
   const handleNotAvailable = useCallback(
     (id: string) => {
       runListAnimation();
-      setTaskNotAvailable(id);
+      setItemNotAvailable(id);
     },
-    [setTaskNotAvailable],
+    [setItemNotAvailable],
   );
 
   if (!category || !categoryId) {
@@ -176,17 +176,17 @@ export default function CategoryDetailsScreen() {
     );
   }
 
-  const renderTask = useCallback(
-    ({ item, drag, isActive }: RenderItemParams<Task>) => (
+  const renderItem = useCallback(
+    ({ item, drag, isActive }: RenderItemParams<ShoppingItem>) => (
       <View style={{ paddingBottom: 12 }}>
         <VerticalScaleDecorator activeScale={1.03}>
-          <TaskItem
-            task={item}
+          <ShoppingItemCard
+            item={item}
             category={{ color: category.color, name: category.name }}
             timeFormat={timeFormat}
             onDelete={handleDelete}
             onToggle={handleToggle}
-            onEdit={(task) => setEditingTask(task)}
+            onEdit={(item) => setEditingItem(item)}
             onLongPress={!isActive ? drag : undefined}
             onNotAvailable={handleNotAvailable}
           />
@@ -204,7 +204,7 @@ export default function CategoryDetailsScreen() {
   );
 
   const progress =
-    totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
   return (
     <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -251,14 +251,12 @@ export default function CategoryDetailsScreen() {
           </View>
         </View>
 
-
-
         <DraggableFlatList
           onDragEnd={({ data }) => {
             justDragged.current = true;
             setListData(data);
             setSortMode("manual");
-            reorderTasks(data.map((t) => t.id));
+            reorderItems(data.map((t) => t.id));
           }}
           ListHeaderComponent={
             <View>
@@ -293,7 +291,7 @@ export default function CategoryDetailsScreen() {
                           { color: colors.textMuted },
                         ]}
                       >
-                        {completedTasks}/{totalTasks}
+                        {completedItems}/{totalItems}
                       </Text>
                     </View>
                     <View
@@ -318,7 +316,7 @@ export default function CategoryDetailsScreen() {
                 <View style={styles.statsRow}>
                   <View style={styles.stat}>
                     <Text style={[styles.statValue, { color: colors.text }]}>
-                      {remainingTasks}
+                      {remainingItems}
                     </Text>
                     <Text
                       style={[styles.statLabel, { color: colors.textMuted }]}
@@ -334,12 +332,12 @@ export default function CategoryDetailsScreen() {
                   />
                   <View style={styles.stat}>
                     <Text style={[styles.statValue, { color: colors.text }]}>
-                      {completedTasks}
+                      {completedItems}
                     </Text>
                     <Text
                       style={[styles.statLabel, { color: colors.textMuted }]}
                     >
-                      Done
+                      Purchased
                     </Text>
                   </View>
                 </View>
@@ -354,13 +352,13 @@ export default function CategoryDetailsScreen() {
                 >
                   {(["todo", "done", "not-available"] as const).map(
                     (filter) => {
-                      const active = taskFilter === filter;
+                      const active = itemFilter === filter;
                       return (
                         <Pressable
                           key={filter}
                           onPress={() => {
                             runListAnimation();
-                            setTaskFilter(filter);
+                            setItemFilter(filter);
                           }}
                           style={[
                             styles.chipBtn,
@@ -420,25 +418,25 @@ export default function CategoryDetailsScreen() {
           ListEmptyComponent={
             <EmptyState
               title={
-                taskFilter === "todo"
+                itemFilter === "todo"
                   ? "Nothing to buy"
-                  : taskFilter === "done"
+                  : itemFilter === "done"
                     ? "No finished purchases"
                     : "N/A"
               }
               description={
-                taskFilter === "todo"
+                itemFilter === "todo"
                   ? "Things you need to buy will appear here."
-                  : taskFilter === "done"
+                  : itemFilter === "done"
                     ? "Finished purchases will appear here."
                     : "Things that are not available today will appear here."
               }
             />
           }
-          renderItem={renderTask}
+          renderItem={renderItem}
         />
 
-        <FloatingActionButton onPress={() => setIsAddingTask(true)} />
+        <FloatingActionButton onPress={() => setIsAddingItem(true)} />
 
         <CategoryFormModal
           visible={editModalVisible}
@@ -446,19 +444,19 @@ export default function CategoryDetailsScreen() {
           initialCategory={category}
         />
 
-        <TaskFormModal
-          visible={isAddingTask || !!editingTask}
+        <ShoppingItemFormModal
+          visible={isAddingItem || !!editingItem}
           onClose={() => {
-            setIsAddingTask(false);
-            setEditingTask(undefined);
+            setIsAddingItem(false);
+            setEditingItem(undefined);
           }}
-          initialTask={editingTask}
+          initialItem={editingItem}
           defaultCategoryId={categoryId}
         />
 
         <SettingsOptionSheet
           visible={sortSheetVisible}
-          title="Sort Todos"
+          title="Sort Items"
           iconName="swap-vertical"
           options={SORT_OPTIONS}
           selectedValue={sortMode}

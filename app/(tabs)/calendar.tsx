@@ -27,7 +27,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FloatingActionButton } from "@/components/floating-action-button";
 import { AppFonts } from "@/constants/fonts";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { useTaskStore } from "@/store/use-task-store";
+import { useShoppingStore } from "@/store/use-task-store";
 import { getMonthGrid, getWeekdayLabels } from "@/utils/calendar";
 import { formatMonthLabel, toDayKey } from "@/utils/date";
 
@@ -43,21 +43,21 @@ export default function CalendarScreen() {
   const { width, height } = useWindowDimensions();
   const colors = useAppTheme();
   const insets = useSafeAreaInsets();
-  const scheduledTasks = useTaskStore((state) => state.scheduledTasks);
-  const deleteScheduledTask = useTaskStore(
-    (state) => state.deleteScheduledTask,
+  const scheduledItems = useShoppingStore((state) => state.scheduledTasks);
+  const deleteScheduledItem = useShoppingStore(
+    (state) => state.deleteScheduledItem,
   );
-  const addScheduledTask = useTaskStore((state) => state.addScheduledTask);
-  const updateScheduledTask = useTaskStore(
-    (state) => state.updateScheduledTask,
+  const addScheduledItem = useShoppingStore((state) => state.addScheduledItem);
+  const updateScheduledItem = useShoppingStore(
+    (state) => state.updateScheduledItem,
   );
-  const settings = useTaskStore((state) => state.settings);
+  const settings = useShoppingStore((state) => state.settings);
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(() => toDayKey(new Date()));
   const [showAll, setShowAll] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingScheduledTask, setEditingScheduledTask] = useState<any>(null);
+  const [editingScheduledItem, setEditingScheduledItem] = useState<any>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -143,25 +143,25 @@ export default function CalendarScreen() {
     return monthGrid.slice(startIdx, startIdx + 14);
   }, [monthGrid, isCollapsed, selectedDay]);
 
-  const taskDates = useMemo(
-    () => new Set(scheduledTasks.map((task) => task.date)),
-    [scheduledTasks],
+  const itemDates = useMemo(
+    () => new Set(scheduledItems.map((item) => item.date)),
+    [scheduledItems],
   );
-  const dayTasks = useMemo(() => {
+  const dayItems = useMemo(() => {
     if (showAll) {
-      return [...scheduledTasks].sort((a, b) =>
+      return [...scheduledItems].sort((a, b) =>
         b.createdAt.localeCompare(a.createdAt),
       );
     }
-    return scheduledTasks.filter((task) => task.date === selectedDay);
-  }, [selectedDay, scheduledTasks, showAll]);
+    return scheduledItems.filter((item) => item.date === selectedDay);
+  }, [selectedDay, scheduledItems, showAll]);
 
   const availableGridWidth = width - 14 * 2; // Full width within container padding
   const daySize = Math.floor(
     (availableGridWidth - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS,
   );
 
-  const handleSaveTask = () => {
+  const handleSaveItem = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
 
@@ -172,15 +172,15 @@ export default function CalendarScreen() {
       timeStr = `${h24.toString().padStart(2, "0")}:${selectedMinute.toString().padStart(2, "0")}:00`;
     }
 
-    if (editingScheduledTask) {
-      updateScheduledTask(editingScheduledTask.id, {
+    if (editingScheduledItem) {
+      updateScheduledItem(editingScheduledItem.id, {
         title: trimmed,
         description,
         date: selectedDay,
         time: timeStr,
       });
     } else {
-      addScheduledTask({
+      addScheduledItem({
         title: trimmed,
         description,
         date: selectedDay,
@@ -195,18 +195,18 @@ export default function CalendarScreen() {
   const resetForm = () => {
     setTitle("");
     setDescription("");
-    setEditingScheduledTask(null);
+    setEditingScheduledItem(null);
     setUseTime(true);
   };
 
-  const handleEditReminder = (task: any) => {
-    setEditingScheduledTask(task);
-    setTitle(task.title);
-    setDescription(task.description || "");
-    setSelectedDay(task.date);
+  const handleEditReminder = (item: any) => {
+    setEditingScheduledItem(item);
+    setTitle(item.title);
+    setDescription(item.description || "");
+    setSelectedDay(item.date);
 
-    if (task.time) {
-      const [h24, m] = task.time.split(":").map(Number);
+    if (item.time) {
+      const [h24, m] = item.time.split(":").map(Number);
       const ampm = h24 >= 12 ? "PM" : "AM";
       const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
       setSelectedHour(h12);
@@ -332,7 +332,7 @@ export default function CalendarScreen() {
             <View style={[styles.grid, { gap: GRID_GAP }]}>
               {displayGrid.map((cell) => {
                 const selected = cell.key === selectedDay;
-                const hasTasks = taskDates.has(cell.key);
+                const hasItems = itemDates.has(cell.key);
                 const isToday = cell.key === todayKey;
                 const labelColor = selected
                   ? readableTextOn(colors.accent)
@@ -372,7 +372,7 @@ export default function CalendarScreen() {
                     <Text style={[styles.dayNumber, { color: labelColor }]}>
                       {cell.date.getDate()}
                     </Text>
-                    {hasTasks ? (
+                    {itemDates.has(cell.key) ? (
                       <>
                         <View
                           style={[
@@ -430,9 +430,9 @@ export default function CalendarScreen() {
               All reminders
             </Text>
           </Pressable>
-          {dayTasks.length ? (
+          {dayItems.length ? (
             <Text style={[styles.sectionCount, { color: colors.textMuted }]}>
-              {dayTasks.length}
+              {dayItems.length}
             </Text>
           ) : null}
         </View>
@@ -444,10 +444,10 @@ export default function CalendarScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {dayTasks.length ? (
-            dayTasks.map((task) => (
+          {dayItems.length ? (
+            dayItems.map((item) => (
               <View
-                key={task.id}
+                key={item.id}
                 style={[
                   styles.todoCard,
                   {
@@ -458,11 +458,11 @@ export default function CalendarScreen() {
               >
                 <View style={styles.todoHeader}>
                   <Text style={[styles.todoTitle, { color: colors.text }]}>
-                    {task.title}
+                    {item.title}
                   </Text>
                   <View style={styles.todoActions}>
                     <Pressable
-                      onPress={() => handleEditReminder(task)}
+                      onPress={() => handleEditReminder(item)}
                       style={[
                         styles.editButton,
                         {
@@ -478,7 +478,7 @@ export default function CalendarScreen() {
                       />
                     </Pressable>
                     <Pressable
-                      onPress={() => deleteScheduledTask(task.id)}
+                      onPress={() => deleteScheduledItem(item.id)}
                       style={[
                         styles.skipButton,
                         {
@@ -494,7 +494,7 @@ export default function CalendarScreen() {
                       </Text>
                     </Pressable>
                     <Pressable
-                      onPress={() => deleteScheduledTask(task.id)}
+                      onPress={() => deleteScheduledItem(item.id)}
                       style={[
                         styles.deleteButton,
                         {
@@ -511,14 +511,14 @@ export default function CalendarScreen() {
                     </Pressable>
                   </View>
                 </View>
-                {task.description ? (
+                {item.description ? (
                   <Text
                     style={[
                       styles.todoDescription,
                       { color: colors.textMuted },
                     ]}
                   >
-                    {task.description}
+                    {item.description}
                   </Text>
                 ) : null}
               </View>
@@ -606,11 +606,11 @@ export default function CalendarScreen() {
                 style={[styles.handleBar, { backgroundColor: colors.border }]}
               />
               <Text style={[styles.modalTitle, { color: colors.text }]}>
-                {editingScheduledTask ? "Edit reminder" : "New reminder"}
+                {editingScheduledItem ? "Edit reminder" : "New reminder"}
               </Text>
               <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
                 Alert for{" "}
-                {editingScheduledTask ? editingScheduledTask.date : selectedDay}
+                {editingScheduledItem ? editingScheduledItem.date : selectedDay}
               </Text>
 
               <View style={styles.formField}>
@@ -934,7 +934,7 @@ export default function CalendarScreen() {
 
                 <Pressable
                   disabled={!title.trim()}
-                  onPress={handleSaveTask}
+                  onPress={handleSaveItem}
                   style={[
                     styles.primaryButton,
                     { backgroundColor: colors.accent },
@@ -942,7 +942,7 @@ export default function CalendarScreen() {
                   ]}
                 >
                   <Text style={styles.primaryButtonText}>
-                    {editingScheduledTask ? "Update" : "Save"}
+                    {editingScheduledItem ? "Update" : "Save"}
                   </Text>
                 </Pressable>
               </View>

@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsOptionSheet } from "@/components/settings-option-sheet";
 import { AppFonts } from "@/constants/fonts";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { useTaskStore } from "@/store/use-task-store";
+import { useShoppingStore } from "@/store/use-task-store";
 import { getMonthGrid, getWeekdayLabels } from "@/utils/calendar";
 
 function StatBox({
@@ -44,30 +44,30 @@ export default function StatisticsScreen() {
   const colors = useAppTheme();
   const insets = useSafeAreaInsets();
   const accent = colors.accent;
-  const tasks = useTaskStore((state) => state.tasks);
-  const taskHistory = useTaskStore((state) => state.taskHistory);
-  const categories = useTaskStore((state) => state.categories);
-  const statsResetAt = useTaskStore((state) => state.settings.statsResetAt);
-  const firstDayOfWeek = useTaskStore((state) => state.settings.firstDayOfWeek);
+  const items = useShoppingStore((state) => state.tasks);
+  const itemHistory = useShoppingStore((state) => state.taskHistory);
+  const categories = useShoppingStore((state) => state.categories);
+  const statsResetAt = useShoppingStore((state) => state.settings.statsResetAt);
+  const firstDayOfWeek = useShoppingStore((state) => state.settings.firstDayOfWeek);
 
   const [historyViewMode, setHistoryViewMode] = useState<"weekly" | "monthly">("weekly");
-  const [selectedTaskTitle, setSelectedTaskTitle] = useState<string | undefined>(undefined);
-  const [isTaskSelectorVisible, setIsTaskSelectorVisible] = useState(false);
+  const [selectedItemTitle, setSelectedItemTitle] = useState<string | undefined>(undefined);
+  const [isItemSelectorVisible, setIsItemSelectorVisible] = useState(false);
 
-  const statsTasks = useMemo(() => {
+  const statsItems = useMemo(() => {
     if (!statsResetAt) {
-      return tasks;
+      return items;
     }
 
     const resetTime = new Date(statsResetAt).getTime();
-    return tasks.filter(
-      (task) => new Date(task.createdAt).getTime() >= resetTime,
+    return items.filter(
+      (item) => new Date(item.createdAt).getTime() >= resetTime,
     );
-  }, [statsResetAt, tasks]);
+  }, [statsResetAt, items]);
 
-  const total = statsTasks.length;
-  const today = statsTasks.filter((task) => {
-    const date = new Date(task.createdAt);
+  const total = statsItems.length;
+  const today = statsItems.filter((item) => {
+    const date = new Date(item.createdAt);
     const now = new Date();
     return (
       date.getDate() === now.getDate() &&
@@ -75,8 +75,8 @@ export default function StatisticsScreen() {
       date.getFullYear() === now.getFullYear()
     );
   }).length;
-  const thisWeek = statsTasks.filter((task) => {
-    const taskDate = new Date(task.createdAt);
+  const thisWeek = statsItems.filter((item) => {
+    const itemDate = new Date(item.createdAt);
     const now = new Date();
     const weekStart = new Date(now);
 
@@ -101,10 +101,56 @@ export default function StatisticsScreen() {
     weekEnd.setDate(weekStart.getDate() + 6); // 6 days later (end of 7-day week)
     weekEnd.setHours(23, 59, 59, 999);
 
-    return taskDate >= weekStart && taskDate <= weekEnd;
+    return itemDate >= weekStart && itemDate <= weekEnd;
   }).length;
-  const done = statsTasks.filter((task) => task.status === "done").length;
+  const done = statsItems.filter((item) => item.status === "done").length;
   const completionRate = total ? ((done / total) * 100).toFixed(1) : "0.0";
+ 
+  const filteredHistory = useMemo(() => {
+    if (!statsResetAt) return itemHistory;
+    const resetTime = new Date(statsResetAt).getTime();
+    return itemHistory.filter((h) => new Date(h.completedAt).getTime() >= resetTime);
+  }, [itemHistory, statsResetAt]);
+ 
+  const spendingStats = useMemo(() => {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+ 
+    // Calculate start of week
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const firstDayIndex = dayNames.indexOf(firstDayOfWeek);
+    const currentDayIndex = now.getDay();
+    const daysToSubtract = (currentDayIndex - firstDayIndex + 7) % 7;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - daysToSubtract);
+    weekStart.setHours(0, 0, 0, 0);
+ 
+    const todaySpending = filteredHistory
+      .filter((h) => h.date === todayStr)
+      .reduce((sum, h) => sum + (h.price || 0), 0);
+ 
+    const weekSpending = filteredHistory
+      .filter((h) => new Date(h.date) >= weekStart)
+      .reduce((sum, h) => sum + (h.price || 0), 0);
+ 
+    const totalSpending = filteredHistory.reduce((sum, h) => sum + (h.price || 0), 0);
+ 
+    const byCategory = categories
+      .map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        color: cat.color,
+        amount: filteredHistory
+          .filter((h) => h.categoryId === cat.id)
+          .reduce((sum, h) => sum + (h.price || 0), 0),
+      }))
+      .filter((c) => c.amount > 0)
+      .sort((a, b) => b.amount - a.amount);
+ 
+    const maxCatAmount = Math.max(...byCategory.map((c) => c.amount), 1);
+ 
+    return { todaySpending, weekSpending, totalSpending, byCategory, maxCatAmount };
+  }, [filteredHistory, categories, firstDayOfWeek]);
 
   const weekdayCounts = useMemo(() => {
     const dayNames: string[] = [
@@ -139,47 +185,47 @@ export default function StatisticsScreen() {
 
     return orderedDayLabels.map((day, index) => ({
       day,
-      count: statsTasks.filter((task) => {
-        const taskDay = new Date(task.createdAt).getDay();
-        return taskDay === orderedDayIndices[index];
+      count: statsItems.filter((item) => {
+        const itemDay = new Date(item.createdAt).getDay();
+        return itemDay === orderedDayIndices[index];
       }).length,
     }));
-  }, [statsTasks, firstDayOfWeek]);
+  }, [statsItems, firstDayOfWeek]);
 
   const hourlyCounts = [
     {
       label: "12 AM - 6 AM",
-      count: statsTasks.filter(
-        (task) => new Date(task.createdAt).getHours() < 6,
+      count: statsItems.filter(
+        (item) => new Date(item.createdAt).getHours() < 6,
       ).length,
     },
     {
       label: "6 AM - 12 PM",
-      count: statsTasks.filter((task) => {
-        const hour = new Date(task.createdAt).getHours();
+      count: statsItems.filter((item) => {
+        const hour = new Date(item.createdAt).getHours();
         return hour >= 6 && hour < 12;
       }).length,
     },
     {
       label: "12 PM - 6 PM",
-      count: statsTasks.filter((task) => {
-        const hour = new Date(task.createdAt).getHours();
+      count: statsItems.filter((item) => {
+        const hour = new Date(item.createdAt).getHours();
         return hour >= 12 && hour < 18;
       }).length,
     },
     {
       label: "6 PM - 12 AM",
-      count: statsTasks.filter(
-        (task) => new Date(task.createdAt).getHours() >= 18,
+      count: statsItems.filter(
+        (item) => new Date(item.createdAt).getHours() >= 18,
       ).length,
     },
   ];
 
   const currentStreak = useMemo(() => {
-    const completedTasks = statsTasks.filter((task) => task.status === "done");
+    const completedItems = statsItems.filter((item) => item.status === "done");
     const sortedDays = Array.from(
       new Set(
-        completedTasks.map((task) => new Date(task.createdAt).toDateString()),
+        completedItems.map((item) => new Date(item.createdAt).toDateString()),
       ),
     ).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
     if (!sortedDays.length) return 0;
@@ -194,15 +240,15 @@ export default function StatisticsScreen() {
       }
     }
     return streak;
-  }, [statsTasks]);
+  }, [statsItems]);
 
   const longestStreak = useMemo(() => {
-    const completedTasks = statsTasks.filter((task) => task.status === "done");
+    const completedItems = statsItems.filter((item) => item.status === "done");
     const dayMap = new Map<string, boolean>();
 
-    // Mark days with completed tasks
-    completedTasks.forEach((task) => {
-      const dayKey = new Date(task.createdAt).toDateString();
+    // Mark days with completed items
+    completedItems.forEach((item) => {
+      const dayKey = new Date(item.createdAt).toDateString();
       dayMap.set(dayKey, true);
     });
 
@@ -236,16 +282,16 @@ export default function StatisticsScreen() {
     }
 
     return Math.max(maxStreak, currentStreak);
-  }, [statsTasks]);
+  }, [statsItems]);
   const maxWeekday = Math.max(...weekdayCounts.map((item) => item.count)) || 1;
   const maxHourly = Math.max(...hourlyCounts.map((item) => item.count)) || 1;
 
-  const availableHistoryTasks = useMemo(() => {
+  const availableHistoryItems = useMemo(() => {
     const combined = [
-      ...taskHistory.map((h) => ({ title: h.title, categoryId: h.categoryId })),
-      ...tasks.map((t) => ({ title: t.title, categoryId: t.categoryId })),
+      ...itemHistory.map((h) => ({ title: h.title, categoryId: h.categoryId })),
+      ...items.map((t) => ({ title: t.title, categoryId: t.categoryId })),
     ];
-
+ 
     const uniqueMap = new Map<string, { title: string; categoryId?: string }>();
     combined.forEach((entry) => {
       const key = `${entry.title}|${entry.categoryId || ""}`;
@@ -253,7 +299,7 @@ export default function StatisticsScreen() {
         uniqueMap.set(key, entry);
       }
     });
-
+ 
     return Array.from(uniqueMap.values())
       .sort((a, b) => a.title.localeCompare(b.title))
       .map((entry) => {
@@ -264,17 +310,17 @@ export default function StatisticsScreen() {
           color: category?.color,
         };
       });
-  }, [taskHistory, tasks, categories]);
-
-  const currentSelectedTaskIdentity = selectedTaskTitle || availableHistoryTasks[0]?.value;
+  }, [itemHistory, items, categories]);
+ 
+  const currentSelectedItemIdentity = selectedItemTitle || availableHistoryItems[0]?.value;
 
   const historyChartData = useMemo(() => {
-    if (!currentSelectedTaskIdentity) return [];
-    const [title, categoryId] = currentSelectedTaskIdentity.split("|");
-
+    if (!currentSelectedItemIdentity) return [];
+    const [title, categoryId] = currentSelectedItemIdentity.split("|");
+ 
     const data = [];
     const now = new Date();
-
+ 
     if (historyViewMode === "weekly") {
       // Start from the beginning of the current week based on firstDayOfWeek
       const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -284,12 +330,12 @@ export default function StatisticsScreen() {
       const weekStart = new Date(now);
       weekStart.setDate(now.getDate() - daysToSubtract);
       weekStart.setHours(0, 0, 0, 0);
-
+ 
       for (let i = 0; i < 7; i++) {
         const d = new Date(weekStart);
         d.setDate(weekStart.getDate() + i);
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const count = taskHistory.filter(
+        const count = itemHistory.filter(
           (h) => h.title === title && (h.categoryId || "") === categoryId && h.date === dateStr
         ).length;
         data.push({
@@ -304,7 +350,7 @@ export default function StatisticsScreen() {
         const d = new Date(now);
         d.setDate(now.getDate() - i);
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const count = taskHistory.filter(
+        const count = itemHistory.filter(
           (h) => h.title === title && (h.categoryId || "") === categoryId && h.date === dateStr
         ).length;
         data.push({
@@ -316,13 +362,13 @@ export default function StatisticsScreen() {
       }
     }
     return data;
-  }, [currentSelectedTaskIdentity, historyViewMode, taskHistory, firstDayOfWeek]);
+  }, [currentSelectedItemIdentity, historyViewMode, itemHistory, firstDayOfWeek]);
 
   const maxHistoryCount = Math.max(...historyChartData.map((d: any) => d.count)) || 1;
 
   const snapshotData = useMemo(() => {
-    if (!currentSelectedTaskIdentity) return [];
-    const [title, categoryId] = currentSelectedTaskIdentity.split("|");
+    if (!currentSelectedItemIdentity) return [];
+    const [title, categoryId] = currentSelectedItemIdentity.split("|");
     
     const now = new Date();
     const grid = getMonthGrid(now, firstDayOfWeek);
@@ -330,7 +376,7 @@ export default function StatisticsScreen() {
     return grid.map((cell: any) => {
        const d = cell.date;
        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-       const count = taskHistory.filter(
+       const count = itemHistory.filter(
          (h) => h.title === title && (h.categoryId || "") === categoryId && h.date === dateStr
        ).length;
        
@@ -340,7 +386,7 @@ export default function StatisticsScreen() {
          isCurrentMonth: cell.inCurrentMonth 
        };
     });
-  }, [currentSelectedTaskIdentity, taskHistory, firstDayOfWeek]);
+  }, [currentSelectedItemIdentity, itemHistory, firstDayOfWeek]);
 
   return (
     <View
@@ -360,11 +406,11 @@ export default function StatisticsScreen() {
         <View style={styles.historySection}>
           <View style={styles.historyHeader}>
             <Pressable
-              onPress={() => setIsTaskSelectorVisible(true)}
+              onPress={() => setIsItemSelectorVisible(true)}
               style={[styles.taskSelector, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}
             >
               {(() => {
-                 const identity = availableHistoryTasks.find(t => t.value === currentSelectedTaskIdentity);
+                 const identity = availableHistoryItems.find(t => t.value === currentSelectedItemIdentity);
                  return (
                    <>
                      {identity?.color ? (
@@ -399,7 +445,7 @@ export default function StatisticsScreen() {
 
           <View style={[styles.chartCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
             <Text style={[styles.chartTitle, { color: colors.text }]}>Week View</Text>
-            {currentSelectedTaskIdentity ? (
+            {currentSelectedItemIdentity ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalChart}>
                 <View style={[styles.chartArea, { minWidth: historyViewMode === "weekly" ? '100.1%' : 800, height: 120, alignItems: 'flex-end' }]}>
                   {historyChartData.map((item: any) => (
@@ -427,7 +473,7 @@ export default function StatisticsScreen() {
               </ScrollView>
             ) : (
               <View style={[styles.chartArea, { height: 120, justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: colors.textMuted, fontFamily: AppFonts.medium }}>No Task Selected</Text>
+                <Text style={{ color: colors.textMuted, fontFamily: AppFonts.medium }}>No Item Selected</Text>
               </View>
             )}
           </View>
@@ -478,7 +524,7 @@ export default function StatisticsScreen() {
 
         <View style={styles.sectionWrap}>
           <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 12 }]}>
-            Task Overview
+            Item Overview
           </Text>
           <View style={styles.statsGrid}>
             <StatBox
@@ -510,6 +556,90 @@ export default function StatisticsScreen() {
               value={`${completionRate}%`}
             />
           </View>
+        </View>
+ 
+        <View style={styles.sectionWrap}>
+          <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 12 }]}>
+            Spending Overview
+          </Text>
+          <View style={styles.statsGrid}>
+            <StatBox
+              colors={colors}
+              icon="cash-outline"
+              label="Today"
+              tint="#10B981"
+              value={`$${spendingStats.todaySpending.toFixed(2)}`}
+            />
+            <StatBox
+              colors={colors}
+              icon="wallet-outline"
+              label="This Week"
+              tint="#10B981"
+              value={`$${spendingStats.weekSpending.toFixed(2)}`}
+            />
+            <StatBox
+              colors={colors}
+              icon="stats-chart-outline"
+              label="Total Cost"
+              tint="#10B981"
+              value={`$${spendingStats.totalSpending.toFixed(2)}`}
+            />
+            <StatBox
+              colors={colors}
+              icon="calculator-outline"
+              label="Categories"
+              tint="#10B981"
+              value={`${spendingStats.byCategory.length}`}
+            />
+          </View>
+ 
+          {spendingStats.byCategory.length > 0 && (
+            <View
+              style={[
+                styles.chartCard,
+                {
+                  backgroundColor: colors.surfaceElevated,
+                  borderColor: colors.border,
+                  marginTop: 10,
+                },
+              ]}
+            >
+              <Text style={[styles.chartTitle, { color: colors.text, marginBottom: 16 }]}>
+                Spending by Category
+              </Text>
+              <View style={{ gap: 14 }}>
+                {spendingStats.byCategory.map((cat) => (
+                  <View key={cat.id}>
+                    <View style={styles.catRow}>
+                      <View style={styles.catInfo}>
+                        <View style={[styles.catDot, { backgroundColor: cat.color }]} />
+                        <Text style={[styles.catName, { color: colors.text }]}>{cat.name}</Text>
+                      </View>
+                      <Text style={[styles.catAmount, { color: colors.text }]}>
+                        ${cat.amount.toFixed(2)}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.progressBar,
+                        { backgroundColor: colors.surfaceMuted },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.progressFill,
+                          {
+                            backgroundColor: cat.color,
+                            width: `${(cat.amount / spendingStats.maxCatAmount) * 100}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={styles.sectionWrap}>
@@ -628,14 +758,14 @@ export default function StatisticsScreen() {
       </ScrollView>
 
       <SettingsOptionSheet
-        visible={isTaskSelectorVisible}
-        title="Select Task"
+        visible={isItemSelectorVisible}
+        title="Select Item"
         iconName="bookmark-outline"
-        options={availableHistoryTasks}
-        selectedValue={currentSelectedTaskIdentity}
-        onClose={() => setIsTaskSelectorVisible(false)}
+        options={availableHistoryItems}
+        selectedValue={currentSelectedItemIdentity}
+        onClose={() => setIsItemSelectorVisible(false)}
         onSelect={(val) => {
-          setSelectedTaskTitle(val as string);
+          setSelectedItemTitle(val as string);
         }}
       />
     </View>
@@ -798,6 +928,39 @@ const styles = StyleSheet.create({
   miniValue: {
     fontFamily: AppFonts.semibold,
     fontSize: 15,
+  },
+  catRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  catInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  catDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  catName: {
+    fontFamily: AppFonts.medium,
+    fontSize: 14,
+  },
+  catAmount: {
+    fontFamily: AppFonts.bold,
+    fontSize: 14,
+  },
+  progressBar: {
+    height: 6,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 3,
   },
   chartCard: {
     borderRadius: 22,

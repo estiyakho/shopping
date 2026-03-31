@@ -55,13 +55,13 @@ export function NotificationOnboardingModal({ visible, onComplete }: Notificatio
 
             <Text style={[styles.title, { color: colors.text }]}>Stay on Schedule</Text>
             <Text style={[styles.description, { color: colors.textSoft }]}>
-              Enable notifications to receive timely reminders for your scheduled tasks and never miss a deadline again.
+              Enable notifications to receive timely reminders for your scheduled items and never miss a deadline again.
             </Text>
 
             <View style={styles.features}>
               <Feature icon="alarm-outline" text="Smart Reminders" color={colors.accent} />
               <Feature icon="refresh-outline" text="Automatic Snooze" color={colors.accent} />
-              <Feature icon="checkmark-done-outline" text="Task Updates" color={colors.accent} />
+              <Feature icon="checkmark-done-outline" text="Item Updates" color={colors.accent} />
             </View>
 
             <View style={styles.actions}>

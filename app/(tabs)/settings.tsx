@@ -8,7 +8,7 @@ import { AppFonts } from '@/constants/fonts';
 import { ModernConfirmationModal } from '@/components/modern-confirmation-modal';
 import { SettingsOptionSheet } from '@/components/settings-option-sheet';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { useTaskStore } from '@/store/use-task-store';
+import { useShoppingStore } from '@/store/use-task-store';
 import {
   DefaultScreen,
   FirstDayOfWeek,
@@ -55,7 +55,7 @@ const SNOOZE_DURATIONS: { label: string; value: SnoozeDuration }[] = [
 ];
 const DEFAULT_SCREENS: { label: string; value: DefaultScreen }[] = [
   { label: 'Categories', value: 'categories' },
-  { label: 'All Todos', value: 'todos' },
+  { label: 'All Items', value: 'todos' },
   { label: 'Calendar', value: 'calendar' },
   { label: 'Statistics', value: 'statistics' },
   { label: 'Settings', value: 'settings' },
@@ -179,14 +179,14 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export default function SettingsScreen() {
   const colors = useAppTheme();
   const insets = useSafeAreaInsets();
-  const tasksCount = useTaskStore((state) => state.tasks.length);
-  const categoriesCount = useTaskStore((state) => state.categories.length);
-  const settings = useTaskStore((state) => state.settings);
-  const updateSettings = useTaskStore((state) => state.updateSettings);
-  const setResetInterval = useTaskStore((state) => state.setResetInterval);
-  const resetData = useTaskStore((state) => state.resetData);
-  const resetStats = useTaskStore((state) => state.resetStats);
-  const resetSettings = useTaskStore((state) => state.resetSettings);
+  const itemsCount = useShoppingStore((state) => state.tasks.length);
+  const categoriesCount = useShoppingStore((state) => state.categories.length);
+  const settings = useShoppingStore((state) => state.settings);
+  const updateSettings = useShoppingStore((state) => state.updateSettings);
+  const setResetInterval = useShoppingStore((state) => state.setResetInterval);
+  const resetData = useShoppingStore((state) => state.resetData);
+  const resetStats = useShoppingStore((state) => state.resetStats);
+  const resetSettings = useShoppingStore((state) => state.resetSettings);
   const [activeSheet, setActiveSheet] = useState<SheetKey>(null);
   const [confirmConfig, setConfirmConfig] = useState<{
     visible: boolean;
@@ -208,13 +208,13 @@ export default function SettingsScreen() {
       value === 'data'
         ? {
             title: 'Reset data?',
-            message: 'This clears tasks and categories from the device.',
+            message: 'This clears items and categories from the device.',
             action: resetData,
           }
         : value === 'stats'
           ? {
               title: 'Reset stats?',
-              message: 'This clears the current statistics baseline without deleting tasks.',
+              message: 'This clears the current statistics baseline without deleting items.',
               action: resetStats,
             }
           : {
@@ -257,7 +257,7 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="App Preferences">
-          <Row label="Default Screen" value={DEFAULT_SCREENS.find((item) => item.value === settings.defaultScreen)?.label ?? 'All Todos'} onPress={() => openSheet('defaultScreen')} iconName="layers-outline" />
+          <Row label="Default Screen" value={DEFAULT_SCREENS.find((item) => item.value === settings.defaultScreen)?.label ?? 'All Items'} onPress={() => openSheet('defaultScreen')} iconName="layers-outline" />
           <Row label="Language" value={LANGUAGES.find((item) => item.value === settings.language)?.label ?? 'English'} onPress={() => openSheet('language')} iconName="language-outline" />
         </Section>
 
@@ -265,7 +265,7 @@ export default function SettingsScreen() {
           <Row label="Reset Interval" value={formatRelativeResetLabel(settings.resetInterval)} onPress={() => openSheet('resetInterval')} iconName="refresh-circle-outline" />
           <Row 
             label="Stored Items" 
-            value={`${tasksCount + categoriesCount}`}
+            value={`${itemsCount + categoriesCount}`}
             iconName="archive-outline"
             onPress={() => {}} // No-op row for consistency
           />

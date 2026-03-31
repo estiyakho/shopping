@@ -12,7 +12,7 @@ import { ModernConfirmationModal } from '@/components/modern-confirmation-modal'
 import { VerticalScaleDecorator } from '@/components/vertical-scale-decorator';
 import { AppFonts } from '@/constants/fonts';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { useTaskStore } from '@/store/use-task-store';
+import { useShoppingStore } from '@/store/use-task-store';
 import { runListAnimation } from '@/utils/layout-animation';
 
 function ProgressRing({ progress, color, labelColor, baseColor }: { progress: number; color: string; labelColor: string; baseColor: string }) {
@@ -83,7 +83,7 @@ const CategoryItem = memo(({ item, drag, isActive, onPress, onArchive, onUnarchi
             <View style={styles.cardTextWrap}>
               <Text numberOfLines={1} style={[styles.cardTitle, { color: colors.text }]}>{item.name}</Text>
               <Text numberOfLines={2} style={[styles.cardMeta, { color: colors.textMuted }]}>
-                {item.description || (item.remaining > 0 ? `${item.remaining} task${item.remaining > 1 ? 's' : ''} left` : 'All tasks completed')}
+                {item.description || (item.remaining > 0 ? `${item.remaining} item${item.remaining > 1 ? 's' : ''} left` : 'All items completed')}
               </Text>
             </View>
           </View>
@@ -134,25 +134,25 @@ export default function CategoriesScreen() {
   const router = useRouter();
   const colors = useAppTheme();
   const insets = useSafeAreaInsets();
-  const categories = useTaskStore((state) => state.categories);
-  const tasks = useTaskStore((state) => state.tasks);
-  const reorderCategories = useTaskStore((state) => state.reorderCategories);
+  const categories = useShoppingStore((state) => state.categories);
+  const items = useShoppingStore((state) => state.tasks);
+  const reorderCategories = useShoppingStore((state) => state.reorderCategories);
 
   const categorySummaries = useMemo(() => {
     return categories.map((category) => {
-      const relatedTasks = tasks.filter((task) => task.categoryId === category.id && task.status !== 'not-available');
-      const completed = relatedTasks.filter((task) => task.status === 'done').length;
-      const progress = relatedTasks.length ? Math.round((completed / relatedTasks.length) * 100) : 0;
+      const relatedItems = items.filter((item) => item.categoryId === category.id && item.status !== 'not-available');
+      const completed = relatedItems.filter((item) => item.status === 'done').length;
+      const progress = relatedItems.length ? Math.round((completed / relatedItems.length) * 100) : 0;
 
       return {
         ...category,
-        total: relatedTasks.length,
+        total: relatedItems.length,
         completed,
-        remaining: relatedTasks.length - completed,
+        remaining: relatedItems.length - completed,
         progress,
       };
     });
-  }, [categories, tasks]);
+  }, [categories, items]);
 
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<CategoryTab>('active');
@@ -189,15 +189,15 @@ export default function CategoriesScreen() {
     setListData(filteredCategories);
   }, [filteredCategories]);
 
-  const availableTasks = tasks.filter((task) => task.status !== 'not-available');
-  const totalTasks = availableTasks.length;
-  const completedTasks = availableTasks.filter((task) => task.status === 'done').length;
-  const remainingTasks = totalTasks - completedTasks;
-  const overallProgress = totalTasks ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const availableItems = items.filter((item) => item.status !== 'not-available');
+  const totalItems = availableItems.length;
+  const completedItems = availableItems.filter((item) => item.status === 'done').length;
+  const remainingItems = totalItems - completedItems;
+  const overallProgress = totalItems ? Math.round((completedItems / totalItems) * 100) : 0;
 
-  const archiveCategory = useTaskStore((state) => state.archiveCategory);
-  const unarchiveCategory = useTaskStore((state) => state.unarchiveCategory);
-  const deleteCategory = useTaskStore((state) => state.deleteCategory);
+  const archiveCategory = useShoppingStore((state) => state.archiveCategory);
+  const unarchiveCategory = useShoppingStore((state) => state.unarchiveCategory);
+  const deleteCategory = useShoppingStore((state) => state.deleteCategory);
 
   const handleArchive = useCallback((id: string) => {
     runListAnimation();
@@ -273,11 +273,11 @@ export default function CategoriesScreen() {
           <View style={styles.summaryStats}>
             <View style={[styles.statPill, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
               <Ionicons color={colors.accent} name="checkmark-circle-outline" size={16} />
-              <Text style={[styles.statText, { color: colors.text }]}>{completedTasks} Completed</Text>
+              <Text style={[styles.statText, { color: colors.text }]}>{completedItems} Completed</Text>
             </View>
             <View style={[styles.statPill, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
               <Ionicons color={colors.warning} name="list-outline" size={16} />
-              <Text style={[styles.statText, { color: colors.text }]}>{remainingTasks} Remaining</Text>
+              <Text style={[styles.statText, { color: colors.text }]}>{remainingItems} Remaining</Text>
             </View>
           </View>
         </View>

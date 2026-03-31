@@ -1,6 +1,6 @@
 import { TimeFormat } from '@/types/task';
 
-export function formatTaskDate(value: string, timeFormat: TimeFormat) {
+export function formatItemDate(value: string, timeFormat: TimeFormat) {
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',

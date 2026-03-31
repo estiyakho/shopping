@@ -1,8 +1,8 @@
-import { useRouter } from 'expo-router';
+import { Href, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { Platform } from 'react-native';
 
-type NavigateFn = (href?: string) => void;
+type NavigateFn = (href?: Href) => void;
 
 /**
  * Starts a native View Transition when running on the web; otherwise falls back to plain navigation.

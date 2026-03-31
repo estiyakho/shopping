@@ -1,25 +1,27 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
-import { useTaskStore } from '@/store/use-task-store';
+import { useShoppingStore } from '@/store/use-task-store';
 
 export function useAutoReset() {
-  const hydrated = useTaskStore((state) => state.hydrated);
-  const checkAndResetTasks = useTaskStore((state) => state.checkAndResetTasks);
+  const hydrated = useShoppingStore((state) => state.hydrated);
+  const checkAndResetItems = useShoppingStore((state) => state.checkAndResetItems);
 
   useEffect(() => {
     if (!hydrated) {
       return;
     }
 
-    checkAndResetTasks();
+    // Run on mount
+    checkAndResetItems();
 
-    const subscription = AppState.addEventListener('change', (status) => {
-      if (status === 'active') {
-        checkAndResetTasks();
+    // Run when app comes to foreground
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkAndResetItems();
       }
     });
 
     return () => subscription.remove();
-  }, [checkAndResetTasks, hydrated]);
+  }, [checkAndResetItems, hydrated]);
 }

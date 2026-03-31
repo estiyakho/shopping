@@ -14,7 +14,7 @@ function getStartOfWeek(date: Date, firstDay: FirstDayOfWeek): number {
   return d.getTime();
 }
 
-export function shouldResetTasks(
+export function shouldResetItems(
   interval: ResetInterval,
   lastResetAt: string | null,
   firstDayOfWeek: FirstDayOfWeek = 'sunday',

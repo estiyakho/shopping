@@ -23,15 +23,15 @@ import { EmptyState } from "@/components/empty-state";
 import { VerticalScaleDecorator } from "@/components/vertical-scale-decorator";
 import { FloatingActionButton } from "@/components/floating-action-button";
 import { SettingsOptionSheet } from "@/components/settings-option-sheet";
-import { TaskFormModal } from "@/components/task-form-modal";
-import { TaskItem } from "@/components/task-item";
+import { ShoppingItemFormModal } from "@/components/task-form-modal";
+import { ShoppingItemCard } from "@/components/task-item";
 import { AppFonts } from "@/constants/fonts";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { useTaskStore } from "@/store/use-task-store";
-import { Task, TaskStatus } from "@/types/task";
+import { useShoppingStore } from "@/store/use-task-store";
+import { ShoppingItem, ShoppingItemStatus } from "@/types/task";
 import { runListAnimation } from "@/utils/layout-animation";
 
-const FILTER_OPTIONS: { label: string; value: TaskStatus }[] = [
+const FILTER_OPTIONS: { label: string; value: ShoppingItemStatus }[] = [
   { label: "Doing", value: "todo" },
   { label: "Done", value: "done" },
   { label: "N/A", value: "not-available" },
@@ -51,23 +51,23 @@ export default function TodosScreen() {
   const colors = useAppTheme();
   const insets = useSafeAreaInsets();
 
-  const tasks = useTaskStore((state) => state.tasks);
-  const categories = useTaskStore((state) => state.categories);
-  const toggleTaskStatus = useTaskStore((state) => state.toggleTaskStatus);
-  const deleteTask = useTaskStore((state) => state.deleteTask);
-  const setTaskNotAvailable = useTaskStore((state) => state.setTaskNotAvailable);
-  const reorderTasks = useTaskStore((state) => state.reorderTasks);
-  const timeFormat = useTaskStore((state) => state.settings.timeFormat);
+  const items = useShoppingStore((state) => state.tasks);
+  const categories = useShoppingStore((state) => state.categories);
+  const toggleItemStatus = useShoppingStore((state) => state.toggleItemStatus);
+  const deleteItem = useShoppingStore((state) => state.deleteItem);
+  const setItemNotAvailable = useShoppingStore((state) => state.setItemNotAvailable);
+  const reorderItems = useShoppingStore((state) => state.reorderItems);
+  const timeFormat = useShoppingStore((state) => state.settings.timeFormat);
 
   const initialCategory = Array.isArray(params.categoryId)
     ? params.categoryId[0]
     : params.categoryId;
-  const getInitialFilteredTasks = useCallback((filter: TaskStatus, catId: string, q: string, mode: SortMode) => {
+  const getInitialFilteredItems = useCallback((filter: ShoppingItemStatus, catId: string, q: string, mode: SortMode) => {
     const normalizedQuery = q.trim().toLowerCase();
-    const result = tasks.filter((task) => {
-      const matchesStatus = task.status === filter;
-      const matchesCategory = catId === "all" ? true : task.categoryId === catId;
-      const matchesQuery = !normalizedQuery || task.title.toLowerCase().includes(normalizedQuery);
+    const result = items.filter((item) => {
+      const matchesStatus = item.status === filter;
+      const matchesCategory = catId === "all" ? true : item.categoryId === catId;
+      const matchesQuery = !normalizedQuery || item.title.toLowerCase().includes(normalizedQuery);
       return matchesStatus && matchesCategory && matchesQuery;
     });
 
@@ -81,17 +81,17 @@ export default function TodosScreen() {
       return right.title.localeCompare(left.title);
     });
     return result;
-  }, [tasks]);
+  }, [items]);
 
-  const [activeFilter, setActiveFilter] = useState<TaskStatus>("todo");
+  const [activeFilter, setActiveFilter] = useState<ShoppingItemStatus>("todo");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("manual");
   const [sortSheetVisible, setSortSheetVisible] = useState(false);
-  const [addTaskModalVisible, setAddTaskModalVisible] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
+  const [addItemModalVisible, setAddItemModalVisible] = useState(false);
+  const [editingItem, setEditingItem] = useState<ShoppingItem | undefined>(undefined);
   
-  const [listData, setListData] = useState<Task[]>(() => getInitialFilteredTasks("todo", "all", "", "manual"));
+  const [listData, setListData] = useState<ShoppingItem[]>(() => getInitialFilteredItems("todo", "all", "", "manual"));
   const justDragged = useRef(false);
 
   useLayoutEffect(() => {
@@ -100,9 +100,9 @@ export default function TodosScreen() {
     }
   }, [initialCategory]);
 
-  const filteredTasks = useMemo(() => 
-    getInitialFilteredTasks(activeFilter, selectedCategoryId, query, sortMode),
-    [getInitialFilteredTasks, activeFilter, selectedCategoryId, query, sortMode]
+  const filteredItems = useMemo(() => 
+    getInitialFilteredItems(activeFilter, selectedCategoryId, query, sortMode),
+    [getInitialFilteredItems, activeFilter, selectedCategoryId, query, sortMode]
   );
 
   useEffect(() => {
@@ -110,8 +110,8 @@ export default function TodosScreen() {
       justDragged.current = false;
       return;
     }
-    setListData(filteredTasks);
-  }, [filteredTasks]);
+    setListData(filteredItems);
+  }, [filteredItems]);
 
   const categoryMap = useMemo(
     () =>
@@ -130,22 +130,22 @@ export default function TodosScreen() {
   const handleDelete = useCallback(
     (id: string) => {
       runListAnimation();
-      deleteTask(id);
+      deleteItem(id);
     },
-    [deleteTask],
+    [deleteItem],
   );
 
   const handleToggle = useCallback(
     (id: string) => {
       runListAnimation();
-      toggleTaskStatus(id);
+      toggleItemStatus(id);
     },
-    [toggleTaskStatus],
+    [toggleItemStatus],
   );
 
   const handleEdit = useCallback(
-    (task: Task) => {
-      setEditingTask(task);
+    (item: ShoppingItem) => {
+      setEditingItem(item);
     },
     [],
   );
@@ -153,17 +153,17 @@ export default function TodosScreen() {
   const handleNotAvailable = useCallback(
     (id: string) => {
       runListAnimation();
-      setTaskNotAvailable(id);
+      setItemNotAvailable(id);
     },
-    [setTaskNotAvailable],
+    [setItemNotAvailable],
   );
 
-  const renderTask = useCallback(
-    ({ item, drag, isActive }: RenderItemParams<Task>) => (
+  const renderItem = useCallback(
+    ({ item, drag, isActive }: RenderItemParams<ShoppingItem>) => (
       <View style={{ paddingBottom: 12 }}>
         <VerticalScaleDecorator activeScale={1.03}>
-          <TaskItem
-            task={item}
+          <ShoppingItemCard
+            item={item}
             category={
               item.categoryId ? categoryMap.get(item.categoryId) : undefined
             }
@@ -188,7 +188,7 @@ export default function TodosScreen() {
             justDragged.current = true;
             setListData(data);
             setSortMode("manual");
-            reorderTasks(data.map(t => t.id));
+            reorderItems(data.map(t => t.id));
           }}
           contentContainerStyle={[styles.listContent, { paddingBottom: Math.max(92, insets.bottom + 80) }]}
           data={listData}
@@ -208,7 +208,7 @@ export default function TodosScreen() {
                 <Ionicons color={colors.textMuted} name="search-outline" size={24} />
                 <TextInput
                   onChangeText={setQuery}
-                  placeholder="Search Todo"
+                  placeholder="Search Item"
                   placeholderTextColor={colors.textMuted}
                   style={[styles.searchInput, { color: colors.text }]}
                   value={query}
@@ -311,30 +311,30 @@ export default function TodosScreen() {
             <EmptyState
               title={
                 activeFilter === "todo" 
-                  ? "Add a Todo" 
+                  ? "Your Cart is Empty" 
                   : activeFilter === "done" 
-                    ? "Finished Tasks" 
+                    ? "Purchased Items" 
                     : "Not Available"
               }
               description={
                 activeFilter === "todo"
-                  ? "Create a to do to get started."
+                  ? "Add an item to get started."
                   : activeFilter === "done"
-                    ? "Finished tasks will appear here."
-                    : "Tasks that are not available today are here."
+                    ? "Purchased items will appear here."
+                    : "Items that are unavailable today are here."
               }
             />
           }
-          renderItem={renderTask}
+          renderItem={renderItem}
           showsVerticalScrollIndicator={false}
         />
 
-        <FloatingActionButton onPress={() => setAddTaskModalVisible(true)} />
+        <FloatingActionButton onPress={() => setAddItemModalVisible(true)} />
       </View>
 
       <SettingsOptionSheet
         visible={sortSheetVisible}
-        title="Sort Todos"
+        title="Sort Items"
         iconName="swap-vertical-outline"
         options={SORT_OPTIONS}
         selectedValue={sortMode}
@@ -342,15 +342,15 @@ export default function TodosScreen() {
         onSelect={setSortMode}
       />
 
-      <TaskFormModal
-        visible={addTaskModalVisible || !!editingTask}
-        initialTask={editingTask}
+      <ShoppingItemFormModal
+        visible={addItemModalVisible || !!editingItem}
+        initialItem={editingItem}
         defaultCategoryId={
           selectedCategoryId !== "all" ? selectedCategoryId : undefined
         }
         onClose={() => {
-          setAddTaskModalVisible(false);
-          setEditingTask(undefined);
+          setAddItemModalVisible(false);
+          setEditingItem(undefined);
         }}
       />
     </View>

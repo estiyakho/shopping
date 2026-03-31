@@ -4,11 +4,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppFonts } from '@/constants/fonts';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { Task } from '@/types/task';
-import { formatTaskDate } from '@/utils/date';
+import { ShoppingItem } from '@/types/task';
+import { formatItemDate } from '@/utils/date';
 
-type TaskItemProps = {
-  task: Task;
+type ShoppingItemProps = {
+  item: ShoppingItem;
   category?: {
     color: string;
     name: string;
@@ -17,19 +17,19 @@ type TaskItemProps = {
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onNotAvailable?: (id: string) => void;
-  onEdit?: (task: Task) => void;
+  onEdit?: (item: ShoppingItem) => void;
   onLongPress?: () => void;
 };
 
-function TaskItemComponent({ task, category, timeFormat, onToggle, onDelete, onNotAvailable, onEdit, onLongPress }: TaskItemProps) {
+function ShoppingItemComponent({ item, category, timeFormat, onToggle, onDelete, onNotAvailable, onEdit, onLongPress }: ShoppingItemProps) {
   const colors = useAppTheme();
-  const done = task.status === 'done';
-  const notAvailable = task.status === 'not-available';
+  const done = item.status === 'done';
+  const notAvailable = item.status === 'not-available';
 
   return (
     <Pressable 
       onLongPress={onLongPress} 
-      onPress={() => onEdit?.(task)}
+      onPress={() => onEdit?.(item)}
       delayLongPress={250} 
       style={({ pressed }) => [
         styles.card, 
@@ -43,7 +43,7 @@ function TaskItemComponent({ task, category, timeFormat, onToggle, onDelete, onN
       <View style={styles.leftInteraction}>
         <Pressable 
           hitSlop={12}
-          onPress={() => onToggle(task.id)} 
+          onPress={() => onToggle(item.id)} 
           style={[
             styles.checkbox, 
             { 
@@ -56,9 +56,16 @@ function TaskItemComponent({ task, category, timeFormat, onToggle, onDelete, onN
         </Pressable>
         
         <View style={styles.textBlock}>
-          <Text numberOfLines={1} style={[styles.title, { color: colors.text }, done && { color: colors.textSoft, textDecorationLine: 'line-through' }]}>
-            {task.title}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text numberOfLines={1} style={[styles.title, { color: colors.text, flex: 1 }, done && { color: colors.textSoft, textDecorationLine: 'line-through' }]}>
+              {item.title}
+            </Text>
+            {item.price !== undefined && item.price !== null && (
+              <Text style={[styles.price, { color: colors.accent, opacity: done ? 0.6 : 1 }]}>
+                ${item.price.toFixed(2)}
+              </Text>
+            )}
+          </View>
           <View style={styles.metaWrap}>
             {category ? (
               <View style={[styles.badge, { backgroundColor: `${category.color}15`, borderColor: `${category.color}30` }]}>
@@ -69,7 +76,7 @@ function TaskItemComponent({ task, category, timeFormat, onToggle, onDelete, onN
             <View style={styles.createdRow}>
               <Ionicons name="time-outline" size={12} color={colors.textMuted} />
               <Text style={[styles.timestamp, { color: colors.textMuted }]}>
-                {formatTaskDate(task.createdAt, timeFormat)}
+                {formatItemDate(item.createdAt, timeFormat)}
               </Text>
             </View>
           </View>
@@ -78,14 +85,14 @@ function TaskItemComponent({ task, category, timeFormat, onToggle, onDelete, onN
 
       <View style={styles.rightColumn}>
         <Pressable 
-          onPress={() => onDelete(task.id)} 
+          onPress={() => onDelete(item.id)} 
           style={[styles.deleteButton, { backgroundColor: `${colors.danger}12` }]}
         >
           <Ionicons name="trash-outline" size={16} color={colors.danger} />
         </Pressable>
         {!done && (
           <Pressable 
-            onPress={() => onNotAvailable?.(task.id)}
+            onPress={() => onNotAvailable?.(item.id)}
             style={({ pressed }) => [
               styles.skipButton, 
               { 
@@ -105,13 +112,14 @@ function TaskItemComponent({ task, category, timeFormat, onToggle, onDelete, onN
   );
 }
 
-export const TaskItem = memo(TaskItemComponent, (prev, next) => {
+export const ShoppingItemCard = memo(ShoppingItemComponent, (prev, next) => {
   return (
-    prev.task.id === next.task.id &&
-    prev.task.status === next.task.status &&
-    prev.task.title === next.task.title &&
-    prev.task.description === next.task.description &&
-    prev.task.categoryId === next.task.categoryId &&
+    prev.item.id === next.item.id &&
+    prev.item.status === next.item.status &&
+    prev.item.title === next.item.title &&
+    prev.item.description === next.item.description &&
+    prev.item.categoryId === next.item.categoryId &&
+    prev.item.price === next.item.price &&
     prev.timeFormat === next.timeFormat &&
     prev.category?.color === next.category?.color &&
     prev.category?.name === next.category?.name
@@ -152,7 +160,17 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: AppFonts.semibold,
     fontSize: 17,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 6,
+    gap: 8,
+  },
+  price: {
+    fontFamily: AppFonts.bold,
+    fontSize: 15,
   },
   metaWrap: {
     gap: 6,

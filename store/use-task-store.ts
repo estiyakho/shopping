@@ -5,54 +5,56 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import {
   Category,
   ResetInterval,
-  ScheduledTask,
+  ScheduledShoppingItem,
   Settings,
-  Task,
-  TaskHistoryEntry,
-  TaskStatus,
+  ShoppingItem,
+  ShoppingItemHistoryEntry,
+  ShoppingItemStatus,
 } from "@/types/task";
 import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS } from "@/utils/app-defaults";
-import { shouldResetTasks } from "@/utils/reset";
+import { shouldResetItems } from "@/utils/reset";
 import { 
   scheduleReminderNotification, 
   cancelNotification,
   cancelAllScheduledNotifications
 } from "@/utils/notifications";
 
-type TaskStore = {
+type ShoppingStore = {
   hydrated: boolean;
-  tasks: Task[];
-  scheduledTasks: ScheduledTask[];
-  taskHistory: TaskHistoryEntry[];
+  tasks: ShoppingItem[];
+  scheduledTasks: ScheduledShoppingItem[];
+  taskHistory: ShoppingItemHistoryEntry[];
   categories: Category[];
   settings: Settings;
-  addScheduledTask: (input: {
+  addScheduledItem: (input: {
     title: string;
     description?: string;
     date: string;
     time?: string;
   }) => Promise<void>;
-  deleteScheduledTask: (id: string) => void;
-  updateScheduledTask: (id: string, input: {
+  deleteScheduledItem: (id: string) => void;
+  updateScheduledItem: (id: string, input: {
     title: string;
     description?: string;
     date: string;
     time?: string;
   }) => Promise<void>;
-  addTask: (input: {
+  addItem: (input: {
     title: string;
     description?: string;
     categoryId?: string;
     createdAt?: string;
+    price?: number;
   }) => void;
-  updateTask: (id: string, input: {
+  updateItem: (id: string, input: {
     title: string;
     description?: string;
     categoryId?: string;
+    price?: number;
   }) => string | null;
-  toggleTaskStatus: (id: string) => void;
-  setTaskNotAvailable: (id: string) => void;
-  deleteTask: (id: string) => void;
+  toggleItemStatus: (id: string) => void;
+  setItemNotAvailable: (id: string) => void;
+  deleteItem: (id: string) => void;
   addCategory: (input: {
     name: string;
     description?: string;
@@ -65,7 +67,7 @@ type TaskStore = {
     color?: string;
   }) => string | null;
   reorderCategories: (activeIdsInNewOrder: string[]) => void;
-  reorderTasks: (activeIdsInNewOrder: string[]) => void;
+  reorderItems: (activeIdsInNewOrder: string[]) => void;
   archiveCategory: (id: string) => void;
   unarchiveCategory: (id: string) => void;
   deleteCategory: (id: string) => void;
@@ -74,7 +76,7 @@ type TaskStore = {
   resetSettings: () => void;
   updateSettings: (patch: Partial<Settings>) => void;
   setResetInterval: (interval: ResetInterval) => void;
-  checkAndResetTasks: () => void;
+  checkAndResetItems: () => void;
   markHydrated: (value: boolean) => void;
 };
 
@@ -99,7 +101,7 @@ const CATEGORY_ICONS = [
   "shapes-outline",
 ];
 
-export const useTaskStore = create<TaskStore>()(
+export const useShoppingStore = create<ShoppingStore>()(
   persist(
     (set, get) => ({
       hydrated: false,
@@ -108,7 +110,7 @@ export const useTaskStore = create<TaskStore>()(
       settings: DEFAULT_SETTINGS,
       scheduledTasks: [],
       taskHistory: [],
-      addScheduledTask: async ({ title, description, date, time }) => {
+      addScheduledItem: async ({ title, description, date, time }) => {
         const { settings } = get();
         const trimmedTitle = title.trim();
         if (!trimmedTitle) return;
@@ -149,7 +151,7 @@ export const useTaskStore = create<TaskStore>()(
           ],
         }));
       },
-      deleteScheduledTask: (id: string) => {
+      deleteScheduledItem: (id: string) => {
         const task = get().scheduledTasks.find((t) => t.id === id);
         if (task) {
           cancelNotification(task.notificationId).catch(console.error);
@@ -160,7 +162,7 @@ export const useTaskStore = create<TaskStore>()(
           scheduledTasks: state.scheduledTasks.filter((task) => task.id !== id),
         }));
       },
-      updateScheduledTask: async (id, { title, description, date, time }) => {
+      updateScheduledItem: async (id, { title, description, date, time }) => {
         const { settings, scheduledTasks } = get();
         const trimmedTitle = title.trim();
         if (!trimmedTitle) return;
@@ -208,7 +210,7 @@ export const useTaskStore = create<TaskStore>()(
           ),
         }));
       },
-      addTask: ({ title, description, categoryId, createdAt }) =>
+      addItem: ({ title, description, categoryId, createdAt, price }) =>
         set((state) => ({
           tasks: [
             {
@@ -219,11 +221,12 @@ export const useTaskStore = create<TaskStore>()(
               status: "todo",
               createdAt: createdAt ?? new Date().toISOString(),
               orderIndex: Date.now(),
+              price,
             },
             ...state.tasks,
           ],
         })),
-      updateTask: (id, { title, description, categoryId }) => {
+      updateItem: (id, { title, description, categoryId, price }) => {
         const trimmedTitle = title.trim();
         if (!trimmedTitle) return null;
 
@@ -235,18 +238,19 @@ export const useTaskStore = create<TaskStore>()(
                   title: trimmedTitle,
                   description: description?.trim() || undefined,
                   categoryId: categoryId || undefined,
+                  price,
                 }
               : task
           ),
         }));
         return id;
       },
-      toggleTaskStatus: (id: string) =>
+      toggleItemStatus: (id: string) =>
         set((state) => {
           const task = state.tasks.find((t) => t.id === id);
           if (!task) return state;
 
-          const newStatus = (task.status === "todo" ? "done" : "todo") as TaskStatus;
+          const newStatus = (task.status === "todo" ? "done" : "todo") as ShoppingItemStatus;
           const newTasks = state.tasks.map((t) =>
             t.id === id ? { ...t, status: newStatus } : t
           );
@@ -267,19 +271,20 @@ export const useTaskStore = create<TaskStore>()(
                 categoryId: task.categoryId,
                 date: today,
                 completedAt: new Date().toISOString(),
+                price: task.price,
               });
             }
           }
 
           return { ...state, tasks: newTasks, taskHistory: newTaskHistory };
         }),
-      setTaskNotAvailable: (id: string) =>
+      setItemNotAvailable: (id: string) =>
         set((state) => ({
           tasks: state.tasks.map((task) =>
             task.id === id ? { ...task, status: task.status === "not-available" ? "todo" : "not-available" } : task,
           ),
         })),
-      deleteTask: (id: string) =>
+      deleteItem: (id: string) =>
         set((state) => ({
           tasks: state.tasks.filter((task) => task.id !== id),
         })),
@@ -367,7 +372,7 @@ export const useTaskStore = create<TaskStore>()(
         
         return { categories: newCategories };
       }),
-      reorderTasks: (activeIdsInNewOrder: string[]) => set((state) => {
+      reorderItems: (activeIdsInNewOrder: string[]) => set((state) => {
         if (!activeIdsInNewOrder.length) return state;
 
         const targetTasks = state.tasks.filter(t => activeIdsInNewOrder.includes(t.id));
@@ -447,10 +452,10 @@ export const useTaskStore = create<TaskStore>()(
                 : (state.settings.lastResetAt ?? new Date().toISOString()),
           },
         })),
-      checkAndResetTasks: () => {
+      checkAndResetItems: () => {
         const { settings } = get();
 
-        if (!shouldResetTasks(settings.resetInterval, settings.lastResetAt, settings.firstDayOfWeek)) {
+        if (!shouldResetItems(settings.resetInterval, settings.lastResetAt, settings.firstDayOfWeek)) {
           return;
         }
 
@@ -458,8 +463,8 @@ export const useTaskStore = create<TaskStore>()(
           const now = new Date();
           const resetDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-          // Record completed and not-available tasks into history before resetting
-          const newHistoryEntries: TaskHistoryEntry[] = [];
+          // Record completed and not-available items into history before resetting
+          const newHistoryEntries: ShoppingItemHistoryEntry[] = [];
           for (const task of state.tasks) {
             if (task.status === 'done' || task.status === 'not-available') {
               const alreadyLogged = state.taskHistory.some(
@@ -473,6 +478,7 @@ export const useTaskStore = create<TaskStore>()(
                   categoryId: task.categoryId,
                   date: resetDate,
                   completedAt: now.toISOString(),
+                  price: task.price,
                 });
               }
             }
@@ -482,7 +488,7 @@ export const useTaskStore = create<TaskStore>()(
             // Reset all tasks back to 'todo' status instead of deleting them
             tasks: state.tasks.map((task) => ({
               ...task,
-              status: 'todo' as TaskStatus,
+              status: 'todo' as ShoppingItemStatus,
             })),
             taskHistory: [...state.taskHistory, ...newHistoryEntries],
             settings: {
@@ -507,9 +513,9 @@ export const useTaskStore = create<TaskStore>()(
       }),
       migrate: (persistedState) => {
         const state = persistedState as Partial<{
-          tasks: Task[];
-          scheduledTasks: ScheduledTask[];
-          taskHistory: TaskHistoryEntry[];
+          tasks: ShoppingItem[];
+          scheduledTasks: ScheduledShoppingItem[];
+          taskHistory: ShoppingItemHistoryEntry[];
           categories: Category[];
           settings: Partial<Settings> & {
             dynamicColors?: boolean;
@@ -544,7 +550,7 @@ export const useTaskStore = create<TaskStore>()(
         }
 
         state?.markHydrated(true);
-        state?.checkAndResetTasks();
+        state?.checkAndResetItems();
       },
     },
   ),

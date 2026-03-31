@@ -23,57 +23,59 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppFonts } from "@/constants/fonts";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { useTaskStore } from "@/store/use-task-store";
-import { Task } from "@/types/task";
+import { useShoppingStore } from "@/store/use-task-store";
+import { ShoppingItem } from "@/types/task";
 import { runListAnimation } from "@/utils/layout-animation";
 import { CategoryOptionSheet } from "./category-option-sheet";
 
 const MIN_FIELD_HEIGHT = 56;
 
-type TaskFormModalProps = {
+type ShoppingItemFormModalProps = {
   visible: boolean;
   onClose: () => void;
-  onCreated?: (taskId: string) => void;
-  onSaved?: (taskId: string) => void;
-  initialTask?: Task;
+  onCreated?: (itemId: string) => void;
+  onSaved?: (itemId: string) => void;
+  initialItem?: ShoppingItem;
   defaultCategoryId?: string;
 };
 
-export function TaskFormModal({
+export function ShoppingItemFormModal({
   visible,
   onClose,
   onCreated,
   onSaved,
-  initialTask,
+  initialItem,
   defaultCategoryId,
-}: TaskFormModalProps) {
+}: ShoppingItemFormModalProps) {
   const isAndroid = Platform.OS === "android";
   const colors = useAppTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const addTask = useTaskStore((state) => state.addTask);
-  const updateTask = useTaskStore((state) => state.updateTask);
-  const categories = useTaskStore((state) => state.categories);
+  const addItem = useShoppingStore((state) => state.addItem);
+  const updateItem = useShoppingStore((state) => state.updateItem);
+  const categories = useShoppingStore((state) => state.categories);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<
     string | undefined
   >(defaultCategoryId);
+  const [price, setPrice] = useState("");
   const [descriptionHeight, setDescriptionHeight] = useState(MIN_FIELD_HEIGHT);
   const [categorySheetVisible, setCategorySheetVisible] = useState(false);
 
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
 
-  const isEditing = Boolean(initialTask);
+  const isEditing = Boolean(initialItem);
 
   useEffect(() => {
     if (!visible) return;
-    setTitle(initialTask?.title ?? "");
-    setDescription(initialTask?.description ?? "");
-    setSelectedCategoryId(initialTask?.categoryId ?? defaultCategoryId);
-    setDescriptionHeight(MIN_FIELD_HEIGHT);
-  }, [initialTask, defaultCategoryId, visible]);
+    setTitle(initialItem?.title ?? "");
+    setDescription(initialItem?.description ?? "");
+    setSelectedCategoryId(initialItem?.categoryId ?? defaultCategoryId);
+    setPrice(initialItem?.price?.toString() ?? "");
+    setIsKeyboardVisible(false);
+  }, [initialItem, defaultCategoryId, visible]);
 
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -110,21 +112,24 @@ export function TaskFormModal({
     if (!trimmedTitle) return;
 
     runListAnimation();
-    const taskId = initialTask
-      ? updateTask(initialTask.id, {
+    const currentPrice = price.trim() === "" ? undefined : parseFloat(price);
+    const itemId = initialItem
+      ? updateItem(initialItem.id, {
           title: trimmedTitle,
           description,
           categoryId: selectedCategoryId,
+          price: currentPrice,
         })
-      : addTask({
+      : addItem({
           title: trimmedTitle,
           description,
           categoryId: selectedCategoryId,
+          price: currentPrice,
         });
 
-    if (taskId) {
-      if (initialTask) onSaved?.(taskId);
-      else onCreated?.(taskId);
+    if (itemId) {
+      if (initialItem) onSaved?.(itemId);
+      else onCreated?.(itemId);
     }
     onClose();
   };
@@ -190,7 +195,7 @@ export function TaskFormModal({
               />
               <View style={styles.header}>
                 <Text style={[styles.title, { color: colors.text }]}>
-                  {isEditing ? "Edit Task" : "New Task"}
+                  {isEditing ? "Edit Item" : "New Item"}
                 </Text>
                 <Pressable
                   onPress={onClose}
@@ -211,7 +216,7 @@ export function TaskFormModal({
                   <TextInput
                     autoFocus
                     onChangeText={setTitle}
-                    placeholder="What needs to be done?"
+                    placeholder="What do you need to buy?"
                     placeholderTextColor="#64748B"
                     style={[
                       styles.input,
@@ -254,6 +259,27 @@ export function TaskFormModal({
                     ]}
                     textAlignVertical="top"
                     value={description}
+                  />
+                </View>
+
+                <View style={styles.formField}>
+                  <Text style={[styles.label, { color: colors.textSoft }]}>
+                    Price / Value
+                  </Text>
+                  <TextInput
+                    onChangeText={(val) => setPrice(val.replace(/[^0-9.]/g, ""))}
+                    placeholder="0.00"
+                    placeholderTextColor="#64748B"
+                    keyboardType="decimal-pad"
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                        color: colors.text,
+                      },
+                    ]}
+                    value={price}
                   />
                 </View>
 

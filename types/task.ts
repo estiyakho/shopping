@@ -1,4 +1,4 @@
-export type TaskStatus = 'todo' | 'done' | 'not-available';
+export type ShoppingItemStatus = 'todo' | 'done' | 'not-available';
 
 export type ResetInterval = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
@@ -27,14 +27,15 @@ export type Category = {
   orderIndex?: number;
 };
 
-export type Task = {
+export type ShoppingItem = {
   id: string;
   title: string;
   description?: string;
   categoryId?: string;
-  status: TaskStatus;
+  status: ShoppingItemStatus;
   createdAt: string;
   orderIndex?: number;
+  price?: number;
 };
 
 export type Settings = {
@@ -52,7 +53,7 @@ export type Settings = {
   hasCompletedNotificationOnboarding: boolean;
 };
 
-export type ScheduledTask = {
+export type ScheduledShoppingItem = {
   id: string;
   title: string;
   description?: string;
@@ -63,12 +64,13 @@ export type ScheduledTask = {
   createdAt: string;
 };
 
-export type TaskHistoryEntry = {
+export type ShoppingItemHistoryEntry = {
   id: string;
   taskId: string;
   title: string;
-  categoryId?: string; // Track which category this task was in when completed
+  categoryId?: string; // Track which category this item was in when completed
   date: string; // ISO date (YYYY-MM-DD)
   completedAt: string; // ISO string 
+  price?: number;
 };
 

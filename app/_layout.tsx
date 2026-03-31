@@ -17,7 +17,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useAutoReset } from '@/hooks/use-auto-reset';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useTaskStore } from '@/store/use-task-store';
+import { useShoppingStore } from '@/store/use-task-store';
 import { getThemeColors } from '@/utils/theme';
 import { applyInconsolataDefaults } from '@/utils/typography';
 import { NotificationOnboardingModal } from '@/components/notification-onboarding-modal';
@@ -57,9 +57,9 @@ export default function RootLayout() {
   useAutoReset();
 
   const colorScheme = useColorScheme();
-  const settings = useTaskStore((state) => state.settings);
-  const hydrated = useTaskStore((state) => state.hydrated);
-  const updateSettings = useTaskStore((state) => state.updateSettings);
+  const settings = useShoppingStore((state) => state.settings);
+  const hydrated = useShoppingStore((state) => state.hydrated);
+  const updateSettings = useShoppingStore((state) => state.updateSettings);
   const resolvedTheme = settings.theme === 'system' ? colorScheme : settings.theme;
   const palette = useMemo(
     () => getThemeColors(settings, resolvedTheme === 'light' ? 'light' : 'dark'),
