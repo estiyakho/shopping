@@ -14,5 +14,6 @@ export const DEFAULT_SETTINGS: Settings = {
   snoozeDuration: 10,
   defaultScreen: 'todos',
   language: 'english',
+  currency: 'USD',
   hasCompletedNotificationOnboarding: false,
 };

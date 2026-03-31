@@ -50,6 +50,7 @@ export type Settings = {
   snoozeDuration: SnoozeDuration;
   defaultScreen: DefaultScreen;
   language: Language;
+  currency: 'USD' | 'BDT';
   hasCompletedNotificationOnboarding: boolean;
 };
 

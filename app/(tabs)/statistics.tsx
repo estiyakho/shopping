@@ -3,11 +3,12 @@ import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { SettingsOptionSheet } from "@/components/settings-option-sheet";
 import { AppFonts } from "@/constants/fonts";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useShoppingStore } from "@/store/use-task-store";
-import { getMonthGrid, getWeekdayLabels } from "@/utils/calendar";
+import { runListAnimation } from "@/utils/layout-animation";
+
+const BDT_RATE = 120;
 
 function StatBox({
   icon,
@@ -44,960 +45,382 @@ export default function StatisticsScreen() {
   const colors = useAppTheme();
   const insets = useSafeAreaInsets();
   const accent = colors.accent;
+  
   const items = useShoppingStore((state) => state.tasks);
   const itemHistory = useShoppingStore((state) => state.taskHistory);
   const categories = useShoppingStore((state) => state.categories);
-  const statsResetAt = useShoppingStore((state) => state.settings.statsResetAt);
-  const firstDayOfWeek = useShoppingStore((state) => state.settings.firstDayOfWeek);
+  const settings = useShoppingStore((state) => state.settings);
+  const updateSettings = useShoppingStore((state) => state.updateSettings);
+  const firstDayOfWeek = settings.firstDayOfWeek;
+  const currency = settings.currency || "USD";
 
-  const [historyViewMode, setHistoryViewMode] = useState<"weekly" | "monthly">("weekly");
-  const [selectedItemTitle, setSelectedItemTitle] = useState<string | undefined>(undefined);
-  const [isItemSelectorVisible, setIsItemSelectorVisible] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
 
-  const statsItems = useMemo(() => {
-    if (!statsResetAt) {
-      return items;
+  const symbol = currency === "USD" ? "$" : "৳";
+  const formatPrice = (val: number) => {
+    const converted = currency === "USD" ? val : val * BDT_RATE;
+    return `${symbol}${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  // 1. Filter history for current month
+  const monthlyHistory = useMemo(() => {
+    return itemHistory.filter(h => {
+      const d = new Date(h.completedAt);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+  }, [itemHistory, currentMonth, currentYear]);
+
+  // 2. Filter items created this month
+  const monthlyItems = useMemo(() => {
+    return items.filter(item => {
+      const d = new Date(item.createdAt);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+  }, [items, currentMonth, currentYear]);
+
+  // 3. Totals
+  const totalItemCount = monthlyItems.length;
+  const purchasedCount = monthlyHistory.length;
+  
+  const todayStr = now.toISOString().split('T')[0];
+  const todaySpending = monthlyHistory
+    .filter(h => h.date === todayStr)
+    .reduce((sum, h) => sum + (h.price || 0), 0);
+
+  const monthSpending = monthlyHistory.reduce((sum, h) => sum + (h.price || 0), 0);
+
+  // 4. Streak Logic: Consecutive days with spending
+  const streak = useMemo(() => {
+    const spentDates = new Set(itemHistory.map(h => h.date));
+    const sortedDates = Array.from(spentDates).sort((a, b) => b.localeCompare(a));
+    
+    if (sortedDates.length === 0) return { current: 0, longest: 0 };
+
+    let current = 0;
+    let longest = 0;
+    let temp = 0;
+
+    // Check current streak from today or yesterday
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    
+    const hasToday = spentDates.has(today);
+    const hasYesterday = spentDates.has(yesterday);
+
+    if (hasToday || hasYesterday) {
+      let checkDate = hasToday ? new Date() : new Date(Date.now() - 86400000);
+      while (spentDates.has(checkDate.toISOString().split('T')[0])) {
+        current++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
     }
 
-    const resetTime = new Date(statsResetAt).getTime();
-    return items.filter(
-      (item) => new Date(item.createdAt).getTime() >= resetTime,
-    );
-  }, [statsResetAt, items]);
+    // Longest streak
+    const allSorted = Array.from(spentDates).sort((a, b) => a.localeCompare(b));
+    let prevDate: Date | null = null;
+    for (const d of allSorted) {
+      const cur = new Date(d);
+      if (prevDate) {
+        const diff = Math.floor((cur.getTime() - prevDate.getTime()) / 86400000);
+        if (diff === 1) {
+          temp++;
+        } else {
+          longest = Math.max(longest, temp);
+          temp = 1;
+        }
+      } else {
+        temp = 1;
+      }
+      prevDate = cur;
+    }
+    longest = Math.max(longest, temp);
 
-  const total = statsItems.length;
-  const today = statsItems.filter((item) => {
-    const date = new Date(item.createdAt);
-    const now = new Date();
-    return (
-      date.getDate() === now.getDate() &&
-      date.getMonth() === now.getMonth() &&
-      date.getFullYear() === now.getFullYear()
-    );
-  }).length;
-  const thisWeek = statsItems.filter((item) => {
-    const itemDate = new Date(item.createdAt);
-    const now = new Date();
-    const weekStart = new Date(now);
+    return { current, longest };
+  }, [itemHistory]);
 
-    // Calculate start of week based on firstDayOfWeek setting
-    const dayNames = [
-      "sunday",
-      "monday",
-      "tuesday",
-      "wednesday",
-      "thursday",
-      "friday",
-      "saturday",
-    ];
-    const firstDayIndex = dayNames.indexOf(firstDayOfWeek);
-    const currentDayIndex = now.getDay();
-    const daysToSubtract = (currentDayIndex - firstDayIndex + 7) % 7;
+  // 5. Category Spending Breakdown
+  const categorySpending = useMemo(() => {
+    const data: Record<string, { name: string, color: string, amount: number }> = {};
+    
+    monthlyHistory.forEach(h => {
+      const catId = h.categoryId || "others";
+      if (!data[catId]) {
+        const cat = categories.find(c => c.id === catId);
+        data[catId] = {
+          name: cat?.name || "Others",
+          color: cat?.color || colors.textMuted,
+          amount: 0
+        };
+      }
+      data[catId].amount += (h.price || 0);
+    });
 
-    weekStart.setDate(now.getDate() - daysToSubtract);
-    weekStart.setHours(0, 0, 0, 0);
+    return Object.values(data).sort((a, b) => b.amount - a.amount);
+  }, [monthlyHistory, categories, colors.textMuted]);
 
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6); // 6 days later (end of 7-day week)
-    weekEnd.setHours(23, 59, 59, 999);
+  const filteredCategorySpending = useMemo(() => {
+    if (selectedCategoryId === "all") return categorySpending;
+    return categorySpending.filter(c => {
+      const id = categories.find(cat => cat.name === c.name)?.id || "others";
+      return id === selectedCategoryId;
+    });
+  }, [categorySpending, selectedCategoryId, categories]);
 
-    return itemDate >= weekStart && itemDate <= weekEnd;
-  }).length;
-  const done = statsItems.filter((item) => item.status === "done").length;
-  const completionRate = total ? ((done / total) * 100).toFixed(1) : "0.0";
- 
-  const filteredHistory = useMemo(() => {
-    if (!statsResetAt) return itemHistory;
-    const resetTime = new Date(statsResetAt).getTime();
-    return itemHistory.filter((h) => new Date(h.completedAt).getTime() >= resetTime);
-  }, [itemHistory, statsResetAt]);
- 
-  const spendingStats = useMemo(() => {
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
- 
-    // Calculate start of week
+  const maxSpendingInCat = Math.max(...categorySpending.map(c => c.amount), 1);
+
+  // 6. Week Spending View (Creation Date or Completion Date?) - Logic: Money spent per day this week
+  const weekSpendingData = useMemo(() => {
+    const data = [];
     const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
     const firstDayIndex = dayNames.indexOf(firstDayOfWeek);
     const currentDayIndex = now.getDay();
     const daysToSubtract = (currentDayIndex - firstDayIndex + 7) % 7;
+    
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - daysToSubtract);
     weekStart.setHours(0, 0, 0, 0);
- 
-    const todaySpending = filteredHistory
-      .filter((h) => h.date === todayStr)
-      .reduce((sum, h) => sum + (h.price || 0), 0);
- 
-    const weekSpending = filteredHistory
-      .filter((h) => new Date(h.date) >= weekStart)
-      .reduce((sum, h) => sum + (h.price || 0), 0);
- 
-    const totalSpending = filteredHistory.reduce((sum, h) => sum + (h.price || 0), 0);
- 
-    const byCategory = categories
-      .map((cat) => ({
-        id: cat.id,
-        name: cat.name,
-        color: cat.color,
-        amount: filteredHistory
-          .filter((h) => h.categoryId === cat.id)
-          .reduce((sum, h) => sum + (h.price || 0), 0),
-      }))
-      .filter((c) => c.amount > 0)
-      .sort((a, b) => b.amount - a.amount);
- 
-    const maxCatAmount = Math.max(...byCategory.map((c) => c.amount), 1);
- 
-    return { todaySpending, weekSpending, totalSpending, byCategory, maxCatAmount };
-  }, [filteredHistory, categories, firstDayOfWeek]);
-
-  const weekdayCounts = useMemo(() => {
-    const dayNames: string[] = [
-      "sunday",
-      "monday",
-      "tuesday",
-      "wednesday",
-      "thursday",
-      "friday",
-      "saturday",
-    ];
-    const dayLabels: string[] = [
-      "Sun",
-      "Mon",
-      "Tue",
-      "Wed",
-      "Thu",
-      "Fri",
-      "Sat",
-    ];
-
-    // Create ordered arrays based on firstDayOfWeek
-    const firstDayIndex = dayNames.indexOf(firstDayOfWeek);
-    const orderedDayLabels: string[] = [];
-    const orderedDayIndices: number[] = [];
 
     for (let i = 0; i < 7; i++) {
-      const dayIndex = (firstDayIndex + i) % 7;
-      orderedDayLabels.push(dayLabels[dayIndex]);
-      orderedDayIndices.push(dayIndex);
-    }
-
-    return orderedDayLabels.map((day, index) => ({
-      day,
-      count: statsItems.filter((item) => {
-        const itemDay = new Date(item.createdAt).getDay();
-        return itemDay === orderedDayIndices[index];
-      }).length,
-    }));
-  }, [statsItems, firstDayOfWeek]);
-
-  const hourlyCounts = [
-    {
-      label: "12 AM - 6 AM",
-      count: statsItems.filter(
-        (item) => new Date(item.createdAt).getHours() < 6,
-      ).length,
-    },
-    {
-      label: "6 AM - 12 PM",
-      count: statsItems.filter((item) => {
-        const hour = new Date(item.createdAt).getHours();
-        return hour >= 6 && hour < 12;
-      }).length,
-    },
-    {
-      label: "12 PM - 6 PM",
-      count: statsItems.filter((item) => {
-        const hour = new Date(item.createdAt).getHours();
-        return hour >= 12 && hour < 18;
-      }).length,
-    },
-    {
-      label: "6 PM - 12 AM",
-      count: statsItems.filter(
-        (item) => new Date(item.createdAt).getHours() >= 18,
-      ).length,
-    },
-  ];
-
-  const currentStreak = useMemo(() => {
-    const completedItems = statsItems.filter((item) => item.status === "done");
-    const sortedDays = Array.from(
-      new Set(
-        completedItems.map((item) => new Date(item.createdAt).toDateString()),
-      ),
-    ).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-    if (!sortedDays.length) return 0;
-    let streak = 0;
-    let cursor = new Date();
-    for (const day of sortedDays) {
-      if (new Date(day).toDateString() === cursor.toDateString()) {
-        streak += 1;
-        cursor.setDate(cursor.getDate() - 1);
-      } else {
-        break;
-      }
-    }
-    return streak;
-  }, [statsItems]);
-
-  const longestStreak = useMemo(() => {
-    const completedItems = statsItems.filter((item) => item.status === "done");
-    const dayMap = new Map<string, boolean>();
-
-    // Mark days with completed items
-    completedItems.forEach((item) => {
-      const dayKey = new Date(item.createdAt).toDateString();
-      dayMap.set(dayKey, true);
-    });
-
-    if (dayMap.size === 0) return 0;
-
-    // Get all unique days with completed tasks, sorted
-    const sortedDays = Array.from(dayMap.keys()).sort(
-      (a, b) => new Date(a).getTime() - new Date(b).getTime(),
-    );
-
-    let maxStreak = 0;
-    let currentStreak = 0;
-    let prevDate = new Date(sortedDays[0]);
-
-    for (const day of sortedDays) {
-      const currentDate = new Date(day);
-      const dayDiff = Math.floor(
-        (currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24),
-      );
-
-      if (dayDiff === 1) {
-        currentStreak += 1;
-      } else if (dayDiff > 1) {
-        maxStreak = Math.max(maxStreak, currentStreak);
-        currentStreak = 1;
-      } else {
-        currentStreak = 1;
-      }
-
-      prevDate = currentDate;
-    }
-
-    return Math.max(maxStreak, currentStreak);
-  }, [statsItems]);
-  const maxWeekday = Math.max(...weekdayCounts.map((item) => item.count)) || 1;
-  const maxHourly = Math.max(...hourlyCounts.map((item) => item.count)) || 1;
-
-  const availableHistoryItems = useMemo(() => {
-    const combined = [
-      ...itemHistory.map((h) => ({ title: h.title, categoryId: h.categoryId })),
-      ...items.map((t) => ({ title: t.title, categoryId: t.categoryId })),
-    ];
- 
-    const uniqueMap = new Map<string, { title: string; categoryId?: string }>();
-    combined.forEach((entry) => {
-      const key = `${entry.title}|${entry.categoryId || ""}`;
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, entry);
-      }
-    });
- 
-    return Array.from(uniqueMap.values())
-      .sort((a, b) => a.title.localeCompare(b.title))
-      .map((entry) => {
-        const category = entry.categoryId ? categories.find((c) => c.id === entry.categoryId) : undefined;
-        return {
-          label: entry.title,
-          value: `${entry.title}|${entry.categoryId || ""}`,
-          color: category?.color,
-        };
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+      const amount = itemHistory
+        .filter(h => h.date === dateStr)
+        .reduce((sum, h) => sum + (h.price || 0), 0);
+        
+      data.push({
+        label: d.toLocaleDateString(undefined, { weekday: 'short' }),
+        amount,
+        day: d.getDate()
       });
-  }, [itemHistory, items, categories]);
- 
-  const currentSelectedItemIdentity = selectedItemTitle || availableHistoryItems[0]?.value;
-
-  const historyChartData = useMemo(() => {
-    if (!currentSelectedItemIdentity) return [];
-    const [title, categoryId] = currentSelectedItemIdentity.split("|");
- 
-    const data = [];
-    const now = new Date();
- 
-    if (historyViewMode === "weekly") {
-      // Start from the beginning of the current week based on firstDayOfWeek
-      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-      const firstDayIndex = dayNames.indexOf(firstDayOfWeek);
-      const currentDayIndex = now.getDay();
-      const daysToSubtract = (currentDayIndex - firstDayIndex + 7) % 7;
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() - daysToSubtract);
-      weekStart.setHours(0, 0, 0, 0);
- 
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(weekStart);
-        d.setDate(weekStart.getDate() + i);
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const count = itemHistory.filter(
-          (h) => h.title === title && (h.categoryId || "") === categoryId && h.date === dateStr
-        ).length;
-        data.push({
-          date: dateStr,
-          day: d.getDate(),
-          weekday: d.toLocaleDateString(undefined, { weekday: 'short' }),
-          count,
-        });
-      }
-    } else {
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(now);
-        d.setDate(now.getDate() - i);
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const count = itemHistory.filter(
-          (h) => h.title === title && (h.categoryId || "") === categoryId && h.date === dateStr
-        ).length;
-        data.push({
-          date: dateStr,
-          day: d.getDate(),
-          weekday: d.toLocaleDateString(undefined, { weekday: 'short' }),
-          count,
-        });
-      }
     }
     return data;
-  }, [currentSelectedItemIdentity, historyViewMode, itemHistory, firstDayOfWeek]);
+  }, [itemHistory, firstDayOfWeek]);
 
-  const maxHistoryCount = Math.max(...historyChartData.map((d: any) => d.count)) || 1;
-
-  const snapshotData = useMemo(() => {
-    if (!currentSelectedItemIdentity) return [];
-    const [title, categoryId] = currentSelectedItemIdentity.split("|");
-    
-    const now = new Date();
-    const grid = getMonthGrid(now, firstDayOfWeek);
-    
-    return grid.map((cell: any) => {
-       const d = cell.date;
-       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-       const count = itemHistory.filter(
-         (h) => h.title === title && (h.categoryId || "") === categoryId && h.date === dateStr
-       ).length;
-       
-       return { 
-         date: dateStr, 
-         count, 
-         isCurrentMonth: cell.inCurrentMonth 
-       };
-    });
-  }, [currentSelectedItemIdentity, itemHistory, firstDayOfWeek]);
+  const maxWeekSpending = Math.max(...weekSpendingData.map(d => d.amount), 1);
 
   return (
-    <View
-      style={[styles.safeArea, { paddingTop: insets.top, backgroundColor: colors.background }]}
-    >
-      <ScrollView
-        contentContainerStyle={[
-          styles.container,
-          { backgroundColor: colors.background, paddingBottom: insets.bottom + 20 },
-        ]}
+    <View style={[styles.safeArea, { paddingTop: insets.top, backgroundColor: colors.background }]}>
+      <ScrollView 
+        contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + 20 }]} 
         showsVerticalScrollIndicator={false}
       >
+        {/* Header with Currency Selector */}
         <View style={styles.headerRow}>
-          <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Statistics</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Statistics</Text>
+          <View style={[styles.currencySelector, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+            <Pressable 
+              onPress={() => updateSettings({ currency: "USD" })}
+              style={[styles.currencyBtn, currency === "USD" && { backgroundColor: accent }]}
+            >
+              <Text style={[styles.currencyText, { color: currency === "USD" ? "#FFF" : colors.textSoft }]}>$</Text>
+            </Pressable>
+            <Pressable 
+              onPress={() => updateSettings({ currency: "BDT" })}
+              style={[styles.currencyBtn, currency === "BDT" && { backgroundColor: accent }]}
+            >
+              <Text style={[styles.currencyText, { color: currency === "BDT" ? "#FFF" : colors.textSoft }]}>৳</Text>
+            </Pressable>
+          </View>
         </View>
 
-        <View style={styles.historySection}>
-          <View style={styles.historyHeader}>
-            <Pressable
-              onPress={() => setIsItemSelectorVisible(true)}
-              style={[styles.taskSelector, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}
+        {/* Category Island Horizontal Selector */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          style={styles.categoryIslandScroll}
+          contentContainerStyle={styles.categoryIslandContent}
+        >
+          <Pressable 
+            onPress={() => setSelectedCategoryId("all")}
+            style={[styles.categoryChip, selectedCategoryId === "all" && { backgroundColor: colors.surfaceElevated, borderColor: accent }]}
+          >
+            <Text style={[styles.categoryChipText, { color: selectedCategoryId === "all" ? colors.text : colors.textSoft }]}>All</Text>
+          </Pressable>
+          {categories.map(cat => (
+            <Pressable 
+              key={cat.id}
+              onPress={() => setSelectedCategoryId(cat.id)}
+              style={[styles.categoryChip, selectedCategoryId === cat.id && { backgroundColor: colors.surfaceElevated, borderColor: cat.color }]}
             >
-              {(() => {
-                 const identity = availableHistoryItems.find(t => t.value === currentSelectedItemIdentity);
-                 return (
-                   <>
-                     {identity?.color ? (
-                       <View style={[styles.inlineDot, { backgroundColor: identity.color }]} />
-                     ) : (
-                       <Ionicons name="bookmark" size={16} color={accent} />
-                     )}
-                     <Text style={[styles.taskSelectorText, { color: colors.text }]} numberOfLines={1}>
-                       {identity?.label || "No Tasks Yet"}
-                     </Text>
-                   </>
-                 );
-              })()}
-              <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
+              <View style={[styles.dot, { backgroundColor: cat.color }]} />
+              <Text style={[styles.categoryChipText, { color: selectedCategoryId === cat.id ? colors.text : colors.textSoft }]}>{cat.name}</Text>
             </Pressable>
+          ))}
+          <Pressable 
+            onPress={() => setSelectedCategoryId("others")}
+            style={[styles.categoryChip, selectedCategoryId === "others" && { backgroundColor: colors.surfaceElevated, borderColor: colors.textMuted }]}
+          >
+            <Text style={[styles.categoryChipText, { color: selectedCategoryId === "others" ? colors.text : colors.textSoft }]}>Others</Text>
+          </Pressable>
+        </ScrollView>
 
-            <View style={[styles.modeToggle, { backgroundColor: colors.surfaceMuted }]}>
-              <Pressable
-                onPress={() => setHistoryViewMode("weekly")}
-                style={[styles.modeBtn, historyViewMode === "weekly" && { backgroundColor: colors.surfaceElevated }]}
-              >
-                <Text style={[styles.modeBtnText, { color: historyViewMode === "weekly" ? colors.text : colors.textMuted }]}>W</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setHistoryViewMode("monthly")}
-                style={[styles.modeBtn, historyViewMode === "monthly" && { backgroundColor: colors.surfaceElevated }]}
-              >
-                <Text style={[styles.modeBtnText, { color: historyViewMode === "monthly" ? colors.text : colors.textMuted }]}>M</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={[styles.chartCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-            <Text style={[styles.chartTitle, { color: colors.text }]}>Week View</Text>
-            {currentSelectedItemIdentity ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalChart}>
-                <View style={[styles.chartArea, { minWidth: historyViewMode === "weekly" ? '100.1%' : 800, height: 120, alignItems: 'flex-end' }]}>
-                  {historyChartData.map((item: any) => (
-                    <View key={item.date} style={[styles.barWrap, { minWidth: historyViewMode === "weekly" ? 44 : 32 }]}>
-                      <View style={[styles.barTrack, { backgroundColor: colors.surfaceMuted, height: 60, width: 18 }]}>
-                        <View
-                          style={[
-                            styles.barFill,
-                            {
-                              backgroundColor: item.count > 0 ? accent : 'transparent',
-                              height: '100%',
-                            },
-                          ]}
-                        />
-                      </View>
-                      <Text style={[styles.histDate, { color: colors.text, fontSize: 11 }]} numberOfLines={1}>
-                        {item.day}
-                      </Text>
-                      <Text style={[styles.histWeekday, { color: colors.textSoft, fontSize: 9 }]} numberOfLines={1}>
-                        {item.weekday}
-                      </Text>
+        {/* Category Spending Graph */}
+        <View style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>Category Spending</Text>
+          <View style={styles.categoryGraphArea}>
+            {filteredCategorySpending.length > 0 ? (
+              filteredCategorySpending.map((cat, idx) => (
+                <View key={idx} style={styles.spendingRow}>
+                  <View style={styles.spendingInfo}>
+                    <View style={styles.catLabelRow}>
+                      <View style={[styles.dot, { backgroundColor: cat.color }]} />
+                      <Text style={[styles.catLabelText, { color: colors.text }]}>{cat.name}</Text>
                     </View>
-                  ))}
+                    <Text style={[styles.catAmountText, { color: colors.text }]}>{formatPrice(cat.amount)}</Text>
+                  </View>
+                  <View style={[styles.spendingBarTrack, { backgroundColor: colors.surfaceMuted }]}>
+                    <View 
+                      style={[
+                        styles.spendingBarFill, 
+                        { backgroundColor: cat.color, width: `${(cat.amount / maxSpendingInCat) * 100}%` }
+                      ]} 
+                    />
+                  </View>
                 </View>
-              </ScrollView>
+              ))
             ) : (
-              <View style={[styles.chartArea, { height: 120, justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: colors.textMuted, fontFamily: AppFonts.medium }}>No Item Selected</Text>
+              <View style={styles.emptyGraph}>
+                <Ionicons name="stats-chart-outline" size={32} color={colors.textMuted} />
+                <Text style={{ color: colors.textSoft, marginTop: 8 }}>No spending recorded</Text>
               </View>
             )}
           </View>
         </View>
 
-        <View style={[styles.chartCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, marginBottom: 20 }]}>
-          <View style={styles.historyHeader}>
-            <Text style={[styles.chartTitle, { color: colors.text, marginBottom: 0 }]}>Snap Shot</Text>
-            <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: AppFonts.medium }}>
-              {new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-            </Text>
-          </View>
-          
-          <View style={[styles.snapshotGridWrapper, { marginTop: 16 }]}>
-            <View style={styles.snapshotDayLabels}>
-              {getWeekdayLabels(firstDayOfWeek).map((day: string, idx: number) => (
-                <Text key={idx} style={[styles.snapshotDayText, { color: colors.textSoft }]}>
-                  {day.charAt(0)}
-                </Text>
-              ))}
-            </View>
-            <View style={styles.snapshotGrid}>
-              {snapshotData.map((item: any) => {
-                let opacity = 0.03; // Out of month
-                if (item.isCurrentMonth) {
-                  opacity = item.count > 0 ? (item.count === 1 ? 0.4 : 1) : 0.1;
-                } else if (item.count > 0) {
-                  // Even if out of month, show color but ghosted
-                  opacity = 0.15;
-                }
-
-                return (
+        {/* Week View Spending Chart */}
+        <View style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>Spending this Week</Text>
+          <View style={styles.weekChartArea}>
+            {weekSpendingData.map((day, idx) => (
+              <View key={idx} style={styles.weekBarCol}>
+                <View style={[styles.weekBarTrack, { backgroundColor: colors.surfaceMuted }]}>
                   <View 
-                    key={item.date} 
                     style={[
-                      styles.snapshotBlock, 
+                      styles.weekBarFill, 
                       { 
-                        backgroundColor: item.count > 0 ? accent : colors.textMuted,
-                        opacity 
+                        backgroundColor: accent, 
+                        height: day.amount > 0 ? `${Math.max(10, (day.amount / maxWeekSpending) * 100)}%` : 0 
                       }
                     ]} 
                   />
-                );
-              })}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.sectionWrap}>
-          <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 12 }]}>
-            Item Overview
-          </Text>
-          <View style={styles.statsGrid}>
-            <StatBox
-              colors={colors}
-              icon="checkmark-circle-outline"
-              label="Today"
-              tint={accent}
-              value={`${today}`}
-            />
-            <StatBox
-              colors={colors}
-              icon="calendar-outline"
-              label="This Week"
-              tint={accent}
-              value={`${thisWeek}`}
-            />
-            <StatBox
-              colors={colors}
-              icon="albums-outline"
-              label="Total"
-              tint={accent}
-              value={`${total}`}
-            />
-            <StatBox
-              colors={colors}
-              icon="pie-chart-outline"
-              label="Completion"
-              tint={accent}
-              value={`${completionRate}%`}
-            />
-          </View>
-        </View>
- 
-        <View style={styles.sectionWrap}>
-          <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 12 }]}>
-            Spending Overview
-          </Text>
-          <View style={styles.statsGrid}>
-            <StatBox
-              colors={colors}
-              icon="cash-outline"
-              label="Today"
-              tint="#10B981"
-              value={`$${spendingStats.todaySpending.toFixed(2)}`}
-            />
-            <StatBox
-              colors={colors}
-              icon="wallet-outline"
-              label="This Week"
-              tint="#10B981"
-              value={`$${spendingStats.weekSpending.toFixed(2)}`}
-            />
-            <StatBox
-              colors={colors}
-              icon="stats-chart-outline"
-              label="Total Cost"
-              tint="#10B981"
-              value={`$${spendingStats.totalSpending.toFixed(2)}`}
-            />
-            <StatBox
-              colors={colors}
-              icon="calculator-outline"
-              label="Categories"
-              tint="#10B981"
-              value={`${spendingStats.byCategory.length}`}
-            />
-          </View>
- 
-          {spendingStats.byCategory.length > 0 && (
-            <View
-              style={[
-                styles.chartCard,
-                {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.border,
-                  marginTop: 10,
-                },
-              ]}
-            >
-              <Text style={[styles.chartTitle, { color: colors.text, marginBottom: 16 }]}>
-                Spending by Category
-              </Text>
-              <View style={{ gap: 14 }}>
-                {spendingStats.byCategory.map((cat) => (
-                  <View key={cat.id}>
-                    <View style={styles.catRow}>
-                      <View style={styles.catInfo}>
-                        <View style={[styles.catDot, { backgroundColor: cat.color }]} />
-                        <Text style={[styles.catName, { color: colors.text }]}>{cat.name}</Text>
-                      </View>
-                      <Text style={[styles.catAmount, { color: colors.text }]}>
-                        ${cat.amount.toFixed(2)}
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.progressBar,
-                        { backgroundColor: colors.surfaceMuted },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.progressFill,
-                          {
-                            backgroundColor: cat.color,
-                            width: `${(cat.amount / spendingStats.maxCatAmount) * 100}%`,
-                          },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.sectionWrap}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Streak
-          </Text>
-          <View style={styles.rowTwo}>
-            <View
-              style={[
-                styles.miniCard,
-                {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <Ionicons color={accent} name="flash-outline" size={16} />
-              <Text style={[styles.miniValue, { color: colors.text }]}>
-                {currentStreak} Current
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.miniCard,
-                {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <Ionicons color={accent} name="ribbon-outline" size={16} />
-              <Text style={[styles.miniValue, { color: colors.text }]}>
-                {longestStreak} Longest
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        <View
-          style={[
-            styles.chartCard,
-            {
-              backgroundColor: colors.surfaceElevated,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Text style={[styles.chartTitle, { color: colors.text }]}>
-            Weekly Activity
-          </Text>
-          <View style={styles.chartArea}>
-            {weekdayCounts.map((item) => (
-              <View key={item.day} style={styles.barWrap}>
-                <View
-                  style={[
-                    styles.barTrack,
-                    { backgroundColor: colors.surfaceMuted },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.barFill,
-                      {
-                        backgroundColor: accent,
-                        height: `${(item.count / maxWeekday) * 100}%`,
-                      },
-                    ]}
-                  />
                 </View>
-                <Text style={[styles.barLabel, { color: colors.textMuted }]}>
-                  {item.day}
-                </Text>
+                <Text style={[styles.weekLabel, { color: colors.textMuted }]}>{day.label}</Text>
               </View>
             ))}
           </View>
         </View>
 
-        <View
-          style={[
-            styles.chartCard,
-            {
-              backgroundColor: colors.surfaceElevated,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Text style={[styles.chartTitle, { color: colors.text }]}>
-            Hourly Activity
-          </Text>
-          <View style={styles.chartArea}>
-            {hourlyCounts.map((item) => (
-              <View key={item.label} style={styles.barWrap}>
-                <View
-                  style={[
-                    styles.barTrack,
-                    { backgroundColor: colors.surfaceMuted },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.barFill,
-                      {
-                        backgroundColor: `${accent}CC`,
-                        height: `${(item.count / maxHourly) * 100}%`,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={[styles.barLabel, { color: colors.textMuted }]}>
-                  {item.label}
-                </Text>
-              </View>
-            ))}
+        {/* Item Overview */}
+        <View style={styles.sectionWrap}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Item Overview</Text>
+          <View style={styles.statsGrid}>
+            <StatBox colors={colors} icon="cart-outline" label="Created (Month)" tint={accent} value={`${totalItemCount}`} />
+            <StatBox colors={colors} icon="bag-check-outline" label="Purchased (Month)" tint={accent} value={`${purchasedCount}`} />
+            <StatBox colors={colors} icon="flash-outline" label="Current Streak" tint="#F59E0B" value={`${streak.current} d`} />
+            <StatBox colors={colors} icon="ribbon-outline" label="Best Streak" tint="#F59E0B" value={`${streak.longest} d`} />
           </View>
         </View>
+
+        {/* Spending Overview */}
+        <View style={styles.sectionWrap}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Spending Overview</Text>
+          <View style={styles.statsGrid}>
+            <StatBox colors={colors} icon="wallet-outline" label="Spent Today" tint="#10B981" value={formatPrice(todaySpending)} />
+            <StatBox colors={colors} icon="cash-outline" label="Spent (Month)" tint="#10B981" value={formatPrice(monthSpending)} />
+            <StatBox colors={colors} icon="calculator-outline" label="Avg/Item" tint="#10B981" value={formatPrice(purchasedCount > 0 ? monthSpending / purchasedCount : 0)} />
+            <StatBox colors={colors} icon="grid-outline" label="Top Category" tint="#10B981" value={categorySpending[0]?.name || "None"} />
+          </View>
+        </View>
+
       </ScrollView>
-
-      <SettingsOptionSheet
-        visible={isItemSelectorVisible}
-        title="Select Item"
-        iconName="bookmark-outline"
-        options={availableHistoryItems}
-        selectedValue={currentSelectedItemIdentity}
-        onClose={() => setIsItemSelectorVisible(false)}
-        onSelect={(val) => {
-          setSelectedItemTitle(val as string);
-        }}
-      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  container: { paddingBottom: 28, paddingHorizontal: 14, paddingTop: 10 },
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 14,
+  container: { paddingHorizontal: 16, paddingTop: 12 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
+  title: { fontFamily: AppFonts.bold, fontSize: 28 },
+  currencySelector: { 
+    flexDirection: "row", 
+    padding: 4, 
+    borderRadius: 14, 
+    borderWidth: 1, 
+    gap: 4 
   },
-  statBox: {
-    borderRadius: 18,
-    borderWidth: 1,
-    minHeight: 92,
-    padding: 12,
-    width: "48.4%",
+  currencyBtn: { 
+    paddingHorizontal: 12, 
+    paddingVertical: 6, 
+    borderRadius: 10 
   },
-  statIconWrap: {
-    alignItems: "center",
-    borderRadius: 10,
-    height: 28,
-    justifyContent: "center",
-    marginBottom: 8,
-    width: 28,
+  currencyText: { fontFamily: AppFonts.bold, fontSize: 14 },
+  
+  categoryIslandScroll: { marginHorizontal: -16, marginBottom: 16 },
+  categoryIslandContent: { paddingHorizontal: 16, gap: 10 },
+  categoryChip: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingHorizontal: 14, 
+    paddingVertical: 8, 
+    borderRadius: 20, 
+    borderWidth: 1, 
+    borderColor: "transparent",
+    gap: 6
   },
-  statValue: {
-    fontFamily: AppFonts.bold,
-    fontSize: 24,
-    marginBottom: 2,
+  categoryChipText: { fontFamily: AppFonts.bold, fontSize: 13 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  
+  card: { borderRadius: 24, borderWidth: 1, padding: 20, marginBottom: 16 },
+  cardTitle: { fontFamily: AppFonts.bold, fontSize: 18, marginBottom: 16 },
+  
+  categoryGraphArea: { gap: 16 },
+  spendingRow: { gap: 8 },
+  spendingInfo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  catLabelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  catLabelText: { fontFamily: AppFonts.semibold, fontSize: 14 },
+  catAmountText: { fontFamily: AppFonts.bold, fontSize: 14 },
+  spendingBarTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
+  spendingBarFill: { height: "100%", borderRadius: 4 },
+  emptyGraph: { height: 100, justifyContent: "center", alignItems: "center" },
+  
+  weekChartArea: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "flex-end", 
+    height: 140,
+    paddingTop: 10
   },
-  statLabel: {
-    fontFamily: AppFonts.medium,
-    fontSize: 13,
+  weekBarCol: { alignItems: "center", flex: 1, gap: 8 },
+  weekBarTrack: { width: 12, height: 100, borderRadius: 6, justifyContent: "flex-end", overflow: "hidden" },
+  weekBarFill: { width: "100%", borderRadius: 6 },
+  weekLabel: { fontFamily: AppFonts.bold, fontSize: 10 },
+  
+  sectionWrap: { marginBottom: 20 },
+  sectionTitle: { fontFamily: AppFonts.bold, fontSize: 22, marginBottom: 12 },
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  statBox: { 
+    width: "48.4%", 
+    padding: 14, 
+    borderRadius: 20, 
+    borderWidth: 1, 
+    minHeight: 100,
+    justifyContent: "center"
   },
-  sectionWrap: {
-    marginBottom: 14,
+  statIconWrap: { 
+    width: 32, 
+    height: 32, 
+    borderRadius: 10, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    marginBottom: 8 
   },
-  sectionTitle: {
-    fontFamily: AppFonts.bold,
-    fontSize: 22,
-    marginBottom: 10,
-  },
-  histDate: {
-    fontFamily: AppFonts.bold,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  histWeekday: {
-    fontFamily: AppFonts.medium,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  historySection: {
-    marginBottom: 20,
-  },
-  historyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 12,
-  },
-  taskSelector: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 8,
-  },
-  inlineDot: {
-    borderRadius: 5,
-    height: 10,
-    width: 10,
-    marginRight: 2,
-  },
-  taskSelectorText: {
-    flex: 1,
-    fontFamily: AppFonts.bold,
-    fontSize: 14,
-  },
-  modeToggle: {
-    flexDirection: 'row',
-    padding: 3,
-    borderRadius: 12,
-  },
-  modeBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 9,
-  },
-  modeBtnText: {
-    fontFamily: AppFonts.bold,
-    fontSize: 11,
-  },
-  horizontalChart: {
-    marginTop: 8,
-  },
-  snapshotGridWrapper: {
-    paddingHorizontal: 4,
-  },
-  snapshotDayLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    paddingHorizontal: 2,
-  },
-  snapshotDayText: {
-    fontFamily: AppFonts.bold,
-    fontSize: 10,
-    width: 32,
-    textAlign: 'center',
-  },
-  snapshotGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'space-between',
-  },
-  snapshotBlock: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-  },
-  snapshotFooter: {
-    marginTop: 14,
-    alignItems: 'center',
-  },
-  snapshotFooterText: {
-    fontFamily: AppFonts.medium,
-    fontSize: 11,
-  },
-  rowTwo: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  miniCard: {
-    alignItems: "center",
-    borderRadius: 16,
-    borderWidth: 1,
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "center",
-    minHeight: 54,
-  },
-  miniValue: {
-    fontFamily: AppFonts.semibold,
-    fontSize: 15,
-  },
-  catRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  catInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  catDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  catName: {
-    fontFamily: AppFonts.medium,
-    fontSize: 14,
-  },
-  catAmount: {
-    fontFamily: AppFonts.bold,
-    fontSize: 14,
-  },
-  progressBar: {
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  chartCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    marginBottom: 14,
-    padding: 14,
-  },
-  chartTitle: {
-    fontFamily: AppFonts.bold,
-    fontSize: 18,
-    marginBottom: 12,
-  },
-  chartArea: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    height: 180,
-    justifyContent: "space-between",
-  },
-  barWrap: {
-    alignItems: "center",
-    flex: 1,
-  },
-  barTrack: {
-    borderRadius: 999,
-    height: 126,
-    justifyContent: "flex-end",
-    overflow: "hidden",
-    width: 18,
-  },
-  barFill: {
-    borderRadius: 999,
-    width: "100%",
-  },
-  barLabel: {
-    fontFamily: AppFonts.medium,
-    fontSize: 11,
-    marginTop: 8,
-    textAlign: "center",
-  },
+  statValue: { fontFamily: AppFonts.bold, fontSize: 18, marginBottom: 2 },
+  statLabel: { fontFamily: AppFonts.medium, fontSize: 12 },
 });
+
