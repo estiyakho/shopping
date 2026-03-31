@@ -378,7 +378,7 @@ export default function CategoryDetailsScreen() {
                             ]}
                           >
                             {filter === "todo"
-                              ? "Doing"
+                              ? "Active"
                               : filter === "done"
                                 ? "Done"
                                 : "N/A"}

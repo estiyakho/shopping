@@ -32,7 +32,7 @@ import { ShoppingItem, ShoppingItemStatus } from "@/types/task";
 import { runListAnimation } from "@/utils/layout-animation";
 
 const FILTER_OPTIONS: { label: string; value: ShoppingItemStatus }[] = [
-  { label: "Doing", value: "todo" },
+  { label: "Active", value: "todo" },
   { label: "Done", value: "done" },
   { label: "N/A", value: "not-available" },
 ];

@@ -17,7 +17,7 @@ All app data is stored locally on the device using `AsyncStorage` through a pers
 ## Current Feature Set
 
 - Add and delete todos
-- Mark todos as `Doing` or `Done`
+- Mark todos as `Active` or `Done`
 - Create tasks and categories from modern in-place popups instead of separate pages
 - Create custom categories with user-selectable colors and icons
 - Search categories and todos
