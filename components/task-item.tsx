@@ -147,9 +147,8 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
     gap: 8,
+    marginBottom: 4,
   },
   price: {
     fontFamily: AppFonts.bold,

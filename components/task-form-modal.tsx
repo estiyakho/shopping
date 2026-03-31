@@ -283,6 +283,7 @@ export function ShoppingItemFormModal({
                   />
                 </View>
 
+
                 <View style={styles.formField}>
                   <Text style={[styles.label, { color: colors.textSoft }]}>
                     Category
@@ -475,16 +476,29 @@ const styles = StyleSheet.create({
   pickerValue: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 12,
   },
   pickerDot: {
-    borderRadius: 5,
-    height: 10,
-    width: 10,
+    borderRadius: 6,
+    height: 12,
+    marginRight: 10,
+    width: 12,
   },
   pickerText: {
     fontFamily: AppFonts.medium,
-    fontSize: 16,
+    fontSize: 15,
+  },
+  toggleSwitch: {
+    width: 36,
+    height: 20,
+    borderRadius: 10,
+    padding: 2,
+    borderWidth: 1,
+    justifyContent: "center",
+  },
+  toggleDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
   },
   footer: {
     flexDirection: "row",

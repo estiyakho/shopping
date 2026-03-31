@@ -15,7 +15,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { useAutoReset } from '@/hooks/use-auto-reset';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useShoppingStore } from '@/store/use-task-store';
 import { getThemeColors } from '@/utils/theme';
@@ -54,7 +53,6 @@ function AppLayout({ backgroundColor, children }: AppLayoutProps) {
 }
 
 export default function RootLayout() {
-  useAutoReset();
 
   const colorScheme = useColorScheme();
   const settings = useShoppingStore((state) => state.settings);

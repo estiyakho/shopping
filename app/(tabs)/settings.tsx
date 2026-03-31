@@ -13,12 +13,10 @@ import {
   DefaultScreen,
   FirstDayOfWeek,
   Language,
-  ResetInterval,
   SnoozeDuration,
   TimeFormat,
 } from '@/types/task';
 import { COLOR_PALETTES } from '@/utils/color-palettes';
-import { formatRelativeResetLabel } from '@/utils/reset';
 
 type SheetKey =
   | null
@@ -29,7 +27,6 @@ type SheetKey =
   | 'snoozeDuration'
   | 'defaultScreen'
   | 'language'
-  | 'resetInterval'
   | 'resetNow';
 
 type RowTone = 'default' | 'danger';
@@ -64,13 +61,6 @@ const LANGUAGES: { label: string; value: Language }[] = [
   { label: 'English', value: 'english' },
   { label: 'Spanish', value: 'spanish' },
   { label: 'French', value: 'french' },
-];
-const RESET_OPTIONS: { label: string; value: ResetInterval }[] = [
-  { label: 'None', value: 'none' },
-  { label: 'Daily', value: 'daily' },
-  { label: 'Weekly', value: 'weekly' },
-  { label: 'Monthly', value: 'monthly' },
-  { label: 'Yearly', value: 'yearly' },
 ];
 const THEMES = [
   { label: 'Light', value: 'light' as const },
@@ -183,7 +173,6 @@ export default function SettingsScreen() {
   const categoriesCount = useShoppingStore((state) => state.categories.length);
   const settings = useShoppingStore((state) => state.settings);
   const updateSettings = useShoppingStore((state) => state.updateSettings);
-  const setResetInterval = useShoppingStore((state) => state.setResetInterval);
   const resetData = useShoppingStore((state) => state.resetData);
   const resetStats = useShoppingStore((state) => state.resetStats);
   const resetSettings = useShoppingStore((state) => state.resetSettings);
@@ -262,7 +251,6 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="Data Management">
-          <Row label="Reset Interval" value={formatRelativeResetLabel(settings.resetInterval)} onPress={() => openSheet('resetInterval')} iconName="refresh-circle-outline" />
           <Row 
             label="Stored Items" 
             value={`${itemsCount + categoriesCount}`}
@@ -280,7 +268,6 @@ export default function SettingsScreen() {
       <SettingsOptionSheet visible={activeSheet === 'snoozeDuration'} title="Snooze Duration" iconName="alarm-outline" options={SNOOZE_DURATIONS} selectedValue={settings.snoozeDuration} onClose={closeSheet} onSelect={(value) => updateSettings({ snoozeDuration: value })} />
       <SettingsOptionSheet visible={activeSheet === 'defaultScreen'} title="Default Screen" iconName="layers-outline" options={DEFAULT_SCREENS} selectedValue={settings.defaultScreen} onClose={closeSheet} onSelect={(value) => updateSettings({ defaultScreen: value })} />
       <SettingsOptionSheet visible={activeSheet === 'language'} title="Language" iconName="language-outline" options={LANGUAGES} selectedValue={settings.language} onClose={closeSheet} onSelect={(value) => updateSettings({ language: value })} />
-      <SettingsOptionSheet visible={activeSheet === 'resetInterval'} title="Reset Interval" iconName="refresh-circle-outline" options={RESET_OPTIONS} selectedValue={settings.resetInterval} onClose={closeSheet} onSelect={(value) => setResetInterval(value)} />
       <SettingsOptionSheet visible={activeSheet === 'resetNow'} title="Reset Now" iconName="trash-outline" options={RESET_ACTIONS} tone="danger" onClose={closeSheet} onSelect={handleResetSelection} />
 
       <ModernConfirmationModal

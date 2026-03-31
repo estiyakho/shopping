@@ -4,7 +4,6 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import {
   Category,
-  ResetInterval,
   ScheduledShoppingItem,
   Settings,
   ShoppingItem,
@@ -12,7 +11,6 @@ import {
   ShoppingItemStatus,
 } from "@/types/task";
 import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS } from "@/utils/app-defaults";
-import { shouldResetItems } from "@/utils/reset";
 import { 
   scheduleReminderNotification, 
   cancelNotification,
@@ -75,8 +73,6 @@ type ShoppingStore = {
   resetStats: () => void;
   resetSettings: () => void;
   updateSettings: (patch: Partial<Settings>) => void;
-  setResetInterval: (interval: ResetInterval) => void;
-  checkAndResetItems: () => void;
   markHydrated: (value: boolean) => void;
 };
 
@@ -436,68 +432,8 @@ export const useShoppingStore = create<ShoppingStore>()(
         })),
       updateSettings: (patch) =>
         set((state) => ({
-          settings: {
-            ...state.settings,
-            ...patch,
-          },
+          settings: { ...state.settings, ...patch },
         })),
-      setResetInterval: (interval: ResetInterval) =>
-        set((state) => ({
-          settings: {
-            ...state.settings,
-            resetInterval: interval,
-            lastResetAt:
-              interval === "none"
-                ? null
-                : (state.settings.lastResetAt ?? new Date().toISOString()),
-          },
-        })),
-      checkAndResetItems: () => {
-        const { settings } = get();
-
-        if (!shouldResetItems(settings.resetInterval, settings.lastResetAt, settings.firstDayOfWeek)) {
-          return;
-        }
-
-        set((state) => {
-          const now = new Date();
-          const resetDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-          // Record completed and not-available items into history before resetting
-          const newHistoryEntries: ShoppingItemHistoryEntry[] = [];
-          for (const task of state.tasks) {
-            if (task.status === 'done' || task.status === 'not-available') {
-              const alreadyLogged = state.taskHistory.some(
-                (h) => h.taskId === task.id && h.date === resetDate
-              );
-              if (!alreadyLogged) {
-                newHistoryEntries.push({
-                  id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                  taskId: task.id,
-                  title: task.title,
-                  categoryId: task.categoryId,
-                  date: resetDate,
-                  completedAt: now.toISOString(),
-                  price: task.price,
-                });
-              }
-            }
-          }
-
-          return {
-            // Reset all tasks back to 'todo' status instead of deleting them
-            tasks: state.tasks.map((task) => ({
-              ...task,
-              status: 'todo' as ShoppingItemStatus,
-            })),
-            taskHistory: [...state.taskHistory, ...newHistoryEntries],
-            settings: {
-              ...state.settings,
-              lastResetAt: now.toISOString(),
-            },
-          };
-        });
-      },
       markHydrated: (value) => set({ hydrated: value }),
     }),
     {
@@ -525,7 +461,11 @@ export const useShoppingStore = create<ShoppingStore>()(
         }>;
 
         return {
-          tasks: state?.tasks ?? [],
+          tasks: (state?.tasks ?? []).map((task) => ({
+            ...task,
+            resetInterval: task.resetInterval ?? ((task as any).isRepeatable ? 'daily' : 'none'),
+            lastResetAt: task.lastResetAt ?? undefined,
+          })),
           scheduledTasks: (state as any)?.scheduledTasks ?? [],
           taskHistory: state?.taskHistory ?? [],
           categories: (state?.categories ?? DEFAULT_CATEGORIES).map(
@@ -550,7 +490,6 @@ export const useShoppingStore = create<ShoppingStore>()(
         }
 
         state?.markHydrated(true);
-        state?.checkAndResetItems();
       },
     },
   ),

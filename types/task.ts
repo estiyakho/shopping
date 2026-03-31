@@ -34,13 +34,15 @@ export type ShoppingItem = {
   categoryId?: string;
   status: ShoppingItemStatus;
   createdAt: string;
+  isArchived?: boolean;
+  resetInterval?: ResetInterval;
+  lastResetAt?: string;
+  history?: ShoppingItemHistoryEntry[];
   orderIndex?: number;
   price?: number;
 };
 
 export type Settings = {
-  resetInterval: ResetInterval;
-  lastResetAt: string | null;
   statsResetAt: string | null;
   theme: AppTheme;
   amoledTheme: boolean;

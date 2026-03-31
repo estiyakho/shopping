@@ -59,38 +59,59 @@ export default function StatisticsScreen() {
     });
   }, [tasks, currentMonth, currentYear]);
 
-  const totalItemCount = monthlyItems.length;
-  const purchasedCount = monthlyHistory.length;
+  const totalPurchasedMonth = monthlyHistory.length;
+  const totalPurchasedAllTime = taskHistory.length;
   const todayStr = now.toISOString().split('T')[0];
   const todaySpending = monthlyHistory.filter((h: any) => h.date === todayStr).reduce((sum: number, h: any) => sum + (h.price || 0), 0);
   const monthSpending = monthlyHistory.reduce((sum: number, h: any) => sum + (h.price || 0), 0);
   const totalSpendingAllTime = taskHistory.reduce((sum: number, h: any) => sum + (h.price || 0), 0);
 
   const streak = useMemo(() => {
-    const spentDates = new Set(taskHistory.map((h: any) => h.date));
-    if (spentDates.size === 0) return { current: 0, longest: 0 };
-    const allSorted = Array.from(spentDates).sort((a: any, b: any) => a.localeCompare(b));
-    let current = 0, longest = 0, temp = 0;
+    // Get unique dates where items were marked as purchased
+    const activeDates = Array.from(new Set(taskHistory.map((h: any) => h.date))).sort();
+    if (activeDates.length === 0) return { current: 0, longest: 0 };
+
     const todayStr = new Date().toISOString().split('T')[0];
     const yesterday = new Date(Date.now() - 86400000);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
-    if (spentDates.has(todayStr) || spentDates.has(yesterdayStr)) {
-      let checkDate = spentDates.has(todayStr) ? new Date() : yesterday;
-      while (spentDates.has(checkDate.toISOString().split('T')[0])) {
-        current++;
-        checkDate.setDate(checkDate.getDate() - 1);
+
+    // Check if the streak is still active (today or yesterday)
+    let current = 0;
+    const isStreakActive = activeDates.includes(todayStr) || activeDates.includes(yesterdayStr);
+
+    if (isStreakActive) {
+      let checkDate = activeDates.includes(todayStr) ? new Date() : yesterday;
+      while (true) {
+        const checkStr = checkDate.toISOString().split('T')[0];
+        if (activeDates.includes(checkStr)) {
+          current++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          break;
+        }
       }
     }
-    let prevDate: Date | null = null;
-    for (const d of allSorted) {
-      const cur = new Date(d);
-      if (prevDate) {
-        if (Math.floor((cur.getTime() - prevDate.getTime()) / 86400000) === 1) temp++;
-        else { longest = Math.max(longest, temp); temp = 1; }
-      } else temp = 1;
-      prevDate = cur;
+
+    // Calculate Best Streak
+    let longest = 0;
+    let temp = 0;
+    for (let i = 0; i < activeDates.length; i++) {
+      if (i > 0) {
+        const prev = new Date(activeDates[i-1]);
+        const curr = new Date(activeDates[i]);
+        const diff = Math.floor((curr.getTime() - prev.getTime()) / 86400000);
+        if (diff === 1) {
+          temp++;
+        } else {
+          longest = Math.max(longest, temp);
+          temp = 1;
+        }
+      } else {
+        temp = 1;
+      }
     }
     longest = Math.max(longest, temp);
+
     return { current, longest };
   }, [taskHistory]);
 
@@ -253,8 +274,8 @@ export default function StatisticsScreen() {
         <View style={styles.sectionWrap}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Item Overview</Text>
           <View style={styles.statsGrid}>
-            <StatBox colors={colors} icon="cart-outline" label="Created (Month)" tint={accent} value={`${totalItemCount}`} />
-            <StatBox colors={colors} icon="bag-check-outline" label="Purchased (Month)" tint={accent} value={`${purchasedCount}`} />
+            <StatBox colors={colors} icon="bag-check-outline" label="Purchased (Month)" tint={accent} value={`${totalPurchasedMonth}`} />
+            <StatBox colors={colors} icon="stats-chart-outline" label="Purchased All Time" tint={accent} value={`${totalPurchasedAllTime}`} />
             <StatBox colors={colors} icon="flash-outline" label="Current Streak" tint="#F59E0B" value={`${streak.current} d`} />
             <StatBox colors={colors} icon="ribbon-outline" label="Best Streak" tint="#F59E0B" value={`${streak.longest} d`} />
           </View>
