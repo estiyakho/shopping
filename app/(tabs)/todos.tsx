@@ -25,16 +25,16 @@ import { FloatingActionButton } from "@/components/floating-action-button";
 import { SettingsOptionSheet } from "@/components/settings-option-sheet";
 import { ShoppingItemFormModal } from "@/components/task-form-modal";
 import { ShoppingItemCard } from "@/components/task-item";
+import { MonthSelectionSheet } from "@/components/month-selection-sheet";
 import { AppFonts } from "@/constants/fonts";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useShoppingStore } from "@/store/use-task-store";
 import { ShoppingItem, ShoppingItemStatus } from "@/types/task";
 import { runListAnimation } from "@/utils/layout-animation";
 
-const FILTER_OPTIONS: { label: string; value: ShoppingItemStatus }[] = [
+const FILTER_OPTIONS: { label: string; value: string }[] = [
   { label: "Active", value: "todo" },
   { label: "Done", value: "done" },
-  { label: "N/A", value: "not-available" },
 ];
 
 const SORT_OPTIONS = [
@@ -53,22 +53,26 @@ export default function TodosScreen() {
 
   const items = useShoppingStore((state) => state.tasks);
   const categories = useShoppingStore((state) => state.categories);
-  const toggleItemStatus = useShoppingStore((state) => state.toggleItemStatus);
+  const setItemStatus = useShoppingStore((state) => state.toggleItemStatus);
   const deleteItem = useShoppingStore((state) => state.deleteItem);
-  const setItemNotAvailable = useShoppingStore((state) => state.setItemNotAvailable);
   const reorderItems = useShoppingStore((state) => state.reorderItems);
   const timeFormat = useShoppingStore((state) => state.settings.timeFormat);
 
   const initialCategory = Array.isArray(params.categoryId)
     ? params.categoryId[0]
     : params.categoryId;
-  const getInitialFilteredItems = useCallback((filter: ShoppingItemStatus, catId: string, q: string, mode: SortMode) => {
+  const getInitialFilteredItems = useCallback((filter: string, catId: string, q: string, mode: SortMode, month: Date) => {
     const normalizedQuery = q.trim().toLowerCase();
     const result = items.filter((item) => {
       const matchesStatus = item.status === filter;
+      
+      const itemDate = new Date(item.createdAt);
+      const matchesDate = itemDate.getMonth() === month.getMonth() && 
+                         itemDate.getFullYear() === month.getFullYear();
+
       const matchesCategory = catId === "all" ? true : item.categoryId === catId;
       const matchesQuery = !normalizedQuery || item.title.toLowerCase().includes(normalizedQuery);
-      return matchesStatus && matchesCategory && matchesQuery;
+      return matchesStatus && matchesDate && matchesCategory && matchesQuery;
     });
 
     result.sort((left, right) => {
@@ -83,7 +87,9 @@ export default function TodosScreen() {
     return result;
   }, [items]);
 
-  const [activeFilter, setActiveFilter] = useState<ShoppingItemStatus>("todo");
+  const [activeFilter, setActiveFilter] = useState<string>("todo");
+  const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [monthSheetVisible, setMonthSheetVisible] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("manual");
@@ -91,7 +97,7 @@ export default function TodosScreen() {
   const [addItemModalVisible, setAddItemModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingItem | undefined>(undefined);
   
-  const [listData, setListData] = useState<ShoppingItem[]>(() => getInitialFilteredItems("todo", "all", "", "manual"));
+  const [listData, setListData] = useState<ShoppingItem[]>(() => getInitialFilteredItems("todo", "all", "", "manual", new Date()));
   const justDragged = useRef(false);
 
   useLayoutEffect(() => {
@@ -101,8 +107,8 @@ export default function TodosScreen() {
   }, [initialCategory]);
 
   const filteredItems = useMemo(() => 
-    getInitialFilteredItems(activeFilter, selectedCategoryId, query, sortMode),
-    [getInitialFilteredItems, activeFilter, selectedCategoryId, query, sortMode]
+    getInitialFilteredItems(activeFilter, selectedCategoryId, query, sortMode, selectedMonth),
+    [getInitialFilteredItems, activeFilter, selectedCategoryId, query, sortMode, selectedMonth]
   );
 
   useEffect(() => {
@@ -138,9 +144,9 @@ export default function TodosScreen() {
   const handleToggle = useCallback(
     (id: string) => {
       runListAnimation();
-      toggleItemStatus(id);
+      setItemStatus(id);
     },
-    [toggleItemStatus],
+    [setItemStatus],
   );
 
   const handleEdit = useCallback(
@@ -150,13 +156,6 @@ export default function TodosScreen() {
     [],
   );
 
-  const handleNotAvailable = useCallback(
-    (id: string) => {
-      runListAnimation();
-      setItemNotAvailable(id);
-    },
-    [setItemNotAvailable],
-  );
 
   const renderItem = useCallback(
     ({ item, drag, isActive }: RenderItemParams<ShoppingItem>) => (
@@ -170,14 +169,13 @@ export default function TodosScreen() {
             timeFormat={timeFormat}
             onDelete={handleDelete}
             onToggle={handleToggle}
-            onNotAvailable={handleNotAvailable}
             onEdit={handleEdit}
             onLongPress={!isActive ? drag : undefined}
           />
         </VerticalScaleDecorator>
       </View>
     ),
-    [categoryMap, handleDelete, handleToggle, handleEdit, timeFormat, handleNotAvailable],
+    [categoryMap, handleDelete, handleToggle, handleEdit, timeFormat],
   );
 
   return (
@@ -243,6 +241,34 @@ export default function TodosScreen() {
                     );
                   })}
                 </View>
+
+                <Pressable
+                  onPress={() => {
+                    setMonthSheetVisible(true);
+                  }}
+                  style={[
+                    styles.monthIsland,
+                    { 
+                      backgroundColor: colors.surfaceElevated,
+                      borderColor: colors.border
+                    },
+                  ]}
+                >
+                  <Ionicons 
+                    name="calendar-outline" 
+                    size={16} 
+                    color={colors.textSoft} 
+                  />
+                  <Text 
+                    style={[
+                      styles.monthIslandText, 
+                      { color: colors.textSoft }
+                    ]}
+                  >
+                    {selectedMonth.toLocaleDateString(undefined, { month: 'short' })}
+                  </Text>
+                  <Ionicons name="chevron-down" size={12} color={colors.textSoft} />
+                </Pressable>
 
                 <Pressable
                   onPress={() => setSortSheetVisible(true)}
@@ -311,18 +337,10 @@ export default function TodosScreen() {
             <EmptyState
               title={
                 activeFilter === "todo" 
-                  ? "Your Cart is Empty" 
-                  : activeFilter === "done" 
-                    ? "Purchased Items" 
-                    : "Not Available"
+                  ? `No Active items in ${selectedMonth.toLocaleDateString(undefined, { month: 'long' })}`
+                  : `No Purchased items in ${selectedMonth.toLocaleDateString(undefined, { month: 'long' })}`
               }
-              description={
-                activeFilter === "todo"
-                  ? "Add an item to get started."
-                  : activeFilter === "done"
-                    ? "Purchased items will appear here."
-                    : "Items that are unavailable today are here."
-              }
+              description="Keep adding items to see them here."
             />
           }
           renderItem={renderItem}
@@ -331,6 +349,17 @@ export default function TodosScreen() {
 
         <FloatingActionButton onPress={() => setAddItemModalVisible(true)} />
       </View>
+
+      <MonthSelectionSheet
+        visible={monthSheetVisible}
+        selectedValue={selectedMonth}
+        onClose={() => setMonthSheetVisible(false)}
+        onSelect={(date: Date) => {
+          runListAnimation();
+          setSelectedMonth(date);
+          setMonthSheetVisible(false);
+        }}
+      />
 
       <SettingsOptionSheet
         visible={sortSheetVisible}
@@ -397,13 +426,27 @@ const styles = StyleSheet.create({
     fontFamily: AppFonts.bold,
     fontSize: 13,
   },
-  sortBtn: {
+  monthIsland: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 14,
+    borderWidth: 1,
+  },
+  monthIslandText: {
+    fontFamily: AppFonts.bold,
+    fontSize: 13,
+  },
+  sortBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
   },
   sortText: {
     fontFamily: AppFonts.bold,

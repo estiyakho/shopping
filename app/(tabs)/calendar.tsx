@@ -477,22 +477,7 @@ export default function CalendarScreen() {
                         color={colors.textMuted}
                       />
                     </Pressable>
-                    <Pressable
-                      onPress={() => deleteScheduledItem(item.id)}
-                      style={[
-                        styles.skipButton,
-                        {
-                          backgroundColor: colors.surfaceMuted,
-                          borderColor: colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.skipText, { color: colors.textSoft }]}
-                      >
-                        N/A
-                      </Text>
-                    </Pressable>
+
                     <Pressable
                       onPress={() => deleteScheduledItem(item.id)}
                       style={[

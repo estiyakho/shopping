@@ -16,15 +16,13 @@ type ShoppingItemProps = {
   timeFormat: '12h' | '24h';
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
-  onNotAvailable?: (id: string) => void;
   onEdit?: (item: ShoppingItem) => void;
   onLongPress?: () => void;
 };
 
-function ShoppingItemComponent({ item, category, timeFormat, onToggle, onDelete, onNotAvailable, onEdit, onLongPress }: ShoppingItemProps) {
+function ShoppingItemComponent({ item, category, timeFormat, onToggle, onDelete, onEdit, onLongPress }: ShoppingItemProps) {
   const colors = useAppTheme();
   const done = item.status === 'done';
-  const notAvailable = item.status === 'not-available';
 
   return (
     <Pressable 
@@ -60,11 +58,6 @@ function ShoppingItemComponent({ item, category, timeFormat, onToggle, onDelete,
             <Text numberOfLines={1} style={[styles.title, { color: colors.text, flex: 1 }, done && { color: colors.textSoft, textDecorationLine: 'line-through' }]}>
               {item.title}
             </Text>
-            {item.price !== undefined && item.price !== null && (
-              <Text style={[styles.price, { color: colors.accent, opacity: done ? 0.6 : 1 }]}>
-                ${item.price.toFixed(2)}
-              </Text>
-            )}
           </View>
           <View style={styles.metaWrap}>
             {category ? (
@@ -90,22 +83,12 @@ function ShoppingItemComponent({ item, category, timeFormat, onToggle, onDelete,
         >
           <Ionicons name="trash-outline" size={16} color={colors.danger} />
         </Pressable>
-        {!done && (
-          <Pressable 
-            onPress={() => onNotAvailable?.(item.id)}
-            style={({ pressed }) => [
-              styles.skipButton, 
-              { 
-                backgroundColor: notAvailable ? `${colors.accent}15` : colors.surfaceMuted,
-                borderColor: notAvailable ? colors.accent : colors.border,
-                opacity: pressed ? 0.6 : 1
-              }
-            ]}
-          >
-            <Text style={[styles.skipText, { color: notAvailable ? colors.accent : colors.textSoft }]}>
-              {notAvailable ? 'RESTORE' : 'N/A'}
+        {item.price !== undefined && item.price !== null && (
+          <View style={[styles.priceContainer, { backgroundColor: `${colors.accent}12`, borderColor: `${colors.accent}30` }]}>
+            <Text style={[styles.price, { color: colors.accent, opacity: done ? 0.6 : 1 }]}>
+              ${item.price.toFixed(2)}
             </Text>
-          </Pressable>
+          </View>
         )}
       </View>
     </Pressable>
@@ -170,7 +153,16 @@ const styles = StyleSheet.create({
   },
   price: {
     fontFamily: AppFonts.bold,
-    fontSize: 15,
+    fontSize: 14,
+  },
+  priceContainer: {
+    borderRadius: 10,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: 'center',
+    minWidth: 72,
+    paddingHorizontal: 8,
+    alignItems: 'center',
   },
   metaWrap: {
     gap: 6,
@@ -208,19 +200,6 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: 'center',
     marginLeft: 8,
-  },
-  skipButton: {
-    borderRadius: 10,
-    borderWidth: 1,
-    height: 32,
-    justifyContent: 'center',
-    minWidth: 72,
-    paddingHorizontal: 10,
-  },
-  skipText: {
-    fontFamily: AppFonts.bold,
-    fontSize: 10,
-    textAlign: 'center',
   },
   deleteButton: {
     alignItems: 'center',
